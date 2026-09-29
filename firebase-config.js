@@ -1,5 +1,3 @@
-// Στοιχεία Firebase για την εφαρμογή «Οι δόσεις μου».
-// Αντικατέστησε τις τιμές με αυτές από Firebase Console → Project settings → Your apps.
 export const firebaseConfig = {
   apiKey: "AIzaSyDGe8n_oXN-t62Fh6MZJlWvNJ_PJEx1Z1s",
   authDomain: "doseis-50e8d.firebaseapp.com",
