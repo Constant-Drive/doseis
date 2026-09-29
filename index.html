@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Οι δόσεις μου</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Commissioner:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#F3F6F5; --card:#FFFFFF; --ink:#16283F; --soft:#56657A; --rule:#D8DEE3;
+  --accent:#2B4C7E; --accent-bg:#E4ECF7; --paid:#1D7A53; --paid-bg:#DDF1E7; --due:#B42318; --due-bg:#FBE6E3;
+  --future:#B9C6D6;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#0E1620; --card:#15202C; --ink:#E5EBF1; --soft:#9AA8B7; --rule:#263544;
+    --accent:#8DB2E8; --accent-bg:#1D2E45; --paid:#4CC38A; --paid-bg:#15342A; --due:#F2776B; --due-bg:#3A1D1B;
+    --future:#34475C;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0E1620; --card:#15202C; --ink:#E5EBF1; --soft:#9AA8B7; --rule:#263544;
+  --accent:#8DB2E8; --accent-bg:#1D2E45; --paid:#4CC38A; --paid-bg:#15342A; --due:#F2776B; --due-bg:#3A1D1B;
+  --future:#34475C;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:"Commissioner",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:16px;line-height:1.45;font-variant-numeric:tabular-nums;-webkit-text-size-adjust:100%}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+.wrap{max-width:720px;margin:0 auto;padding:20px 16px 110px}
+
+header.top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:18px}
+h1{font-size:1.35rem;font-weight:700;margin:0;letter-spacing:-.01em}
+.sync{font-size:.8rem;color:var(--soft)}
+.acct-box{display:flex;align-items:center;gap:10px}
+.acct{border:1px solid var(--rule);background:var(--card);border-radius:999px;padding:6px 12px;font-size:.82rem;font-weight:600;color:var(--accent);min-height:36px}
+.banner{background:var(--accent-bg);border-radius:12px;padding:10px 12px;font-size:.88rem;margin:-6px 0 16px}
+.banner.warn{background:var(--due-bg);color:var(--due)}
+
+/* Hero: selected date */
+.hero{background:var(--card);border:1px solid var(--rule);border-radius:18px;padding:18px 18px 8px}
+.pick{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.pick label{font-size:.9rem;color:var(--soft)}
+.pick-ctrl{display:flex;align-items:center;gap:6px}
+.pick input[type=date]{border:1px solid var(--rule);background:var(--paper);border-radius:10px;padding:8px 10px;min-height:42px}
+.icon-btn{border:1px solid var(--rule);background:var(--paper);border-radius:10px;width:42px;height:42px;display:grid;place-items:center;font-size:1.1rem}
+.today-btn{border:none;background:none;color:var(--accent);font-weight:600;padding:8px 4px}
+.monthsum{margin:16px 0 4px}
+.monthsum .lbl{font-size:.95rem;color:var(--soft)}
+.monthsum .amt{font-size:clamp(2.2rem,9vw,3rem);font-weight:700;letter-spacing:-.02em;line-height:1.1}
+.monthsum .sub{font-size:.9rem;color:var(--soft);margin-top:2px}
+.figs{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--rule);border-top:1px solid var(--rule);margin:14px -18px 0}
+.fig{background:var(--card);padding:12px 12px 14px}
+.fig .lbl{font-size:.78rem;color:var(--soft);line-height:1.25}
+.fig .v{font-weight:600;font-size:1.02rem;margin-top:4px}
+.fig .v.paid{color:var(--paid)}
+
+/* Timeline — the one bold element */
+.timeline{margin-top:22px}
+.timeline h2,.list h2{font-size:1rem;font-weight:600;margin:0 0 8px}
+.strip-box{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;background:var(--card);border:1px solid var(--rule);border-radius:18px;padding:14px 10px 8px}
+.strip{display:flex;align-items:flex-end;gap:4px;height:150px;min-width:min-content}
+.bar{flex:0 0 30px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;border:none;background:none;padding:0;gap:4px}
+.bar .col{width:20px;border-radius:5px 5px 2px 2px;background:var(--future);min-height:3px;transition:height .25s}
+.bar.past .col{background:var(--due)}
+.bar.partial .col{background:linear-gradient(to top,var(--paid) var(--p,0%),var(--due) var(--p,0%))}
+.bar.done .col{background:var(--paid)}
+.bar .m{font-size:.66rem;color:var(--soft);line-height:1}
+.bar .y{font-size:.6rem;color:var(--soft);line-height:1;height:.6rem}
+.bar.sel .col{outline:2px solid var(--ink);outline-offset:2px}
+.bar.sel .m{color:var(--ink);font-weight:700}
+.bar.now .m{text-decoration:underline;text-underline-offset:2px}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:.78rem;color:var(--soft);margin-top:8px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+
+/* Debt list */
+.list{margin-top:24px}
+.list-head{display:flex;justify-content:space-between;align-items:baseline}
+.list-head span{font-size:.85rem;color:var(--soft)}
+.debt{background:var(--card);border:1px solid var(--rule);border-radius:16px;margin-top:10px;overflow:hidden}
+.debt.inactive{opacity:.62}
+.drow{display:grid;grid-template-columns:1fr auto;gap:10px;padding:14px 14px 12px;align-items:start}
+.dname{font-weight:600;font-size:1.05rem;line-height:1.25}
+.dmeta{font-size:.84rem;color:var(--soft);margin-top:2px}
+.damt{text-align:right}
+.damt b{font-size:1.1rem;font-weight:700;display:block}
+.damt small{color:var(--soft);font-size:.78rem}
+.prog{height:6px;background:var(--rule);border-radius:3px;margin:0 14px;overflow:hidden}
+.prog span{display:block;height:100%;background:var(--paid);border-radius:3px}
+.dfoot{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px 12px;flex-wrap:wrap}
+.nums{font-size:.84rem;color:var(--soft)}
+.nums b{color:var(--ink);font-weight:600}
+.flag{display:inline-block;font-size:.76rem;font-weight:600;color:var(--due);background:var(--due-bg);border-radius:999px;padding:2px 8px;margin-left:6px}
+.paybtn{border:1.5px solid var(--rule);background:var(--paper);border-radius:999px;padding:8px 14px;font-weight:600;font-size:.9rem;min-height:40px;display:inline-flex;align-items:center;gap:8px}
+.paybtn .box{width:18px;height:18px;border-radius:5px;border:2px solid var(--soft);display:grid;place-items:center;font-size:.75rem;line-height:1}
+.paybtn[aria-pressed="true"]{border-color:var(--paid);background:var(--paid-bg);color:var(--paid)}
+.paybtn[aria-pressed="true"] .box{background:var(--paid);border-color:var(--paid);color:var(--card)}
+.paybtn:disabled{cursor:default;color:var(--soft);font-weight:500}
+.more{width:100%;border:none;border-top:1px solid var(--rule);background:none;padding:10px 14px;text-align:left;color:var(--accent);font-weight:600;font-size:.9rem}
+.detail{border-top:1px solid var(--rule);padding:14px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:.9rem}
+.kv dt{color:var(--soft)} .kv dd{margin:0;text-align:right;font-weight:500;word-break:break-all}
+.code{display:flex;align-items:center;justify-content:flex-end;gap:8px}
+.copy{border:1px solid var(--rule);background:var(--paper);border-radius:8px;padding:3px 10px;font-size:.8rem}
+.sched-h{font-size:.88rem;color:var(--soft);margin:16px 0 8px}
+.sched{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px}
+.chip{border:1.5px solid var(--rule);background:var(--paper);border-radius:9px;padding:6px 2px;font-size:.78rem;text-align:center;line-height:1.2}
+.chip.paid{background:var(--paid-bg);border-color:var(--paid);color:var(--paid);font-weight:600}
+.chip.late{border-color:var(--due);color:var(--due)}
+.chip.sel{box-shadow:0 0 0 2px var(--ink) inset}
+.dactions{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
+.btn{border:1px solid var(--rule);background:var(--paper);border-radius:10px;padding:9px 14px;font-weight:600;font-size:.9rem;min-height:42px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--card)}
+.btn.danger{color:var(--due);border-color:var(--due)}
+.btn.small{font-size:.82rem;min-height:36px;padding:6px 12px}
+
+.empty{background:var(--card);border:1.5px dashed var(--rule);border-radius:16px;padding:26px 18px;text-align:center;color:var(--soft);margin-top:10px}
+.empty p{margin:0 0 14px}
+
+.fab{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--accent);color:var(--card);border:none;border-radius:999px;padding:14px 20px;font-weight:700;font-size:1rem;box-shadow:0 6px 18px rgba(20,40,70,.28)}
+
+/* Dialog */
+dialog{border:none;border-radius:18px;padding:0;background:var(--card);color:var(--ink);width:min(520px,calc(100vw - 24px));max-height:calc(100% - 24px)}
+dialog::backdrop{background:rgba(10,20,30,.45)}
+.dlg{padding:20px 18px 18px}
+.dlg h3{margin:0 0 14px;font-size:1.15rem}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:.85rem;color:var(--soft);margin-bottom:4px}
+.field input{width:100%;border:1px solid var(--rule);background:var(--paper);border-radius:10px;padding:10px 12px;min-height:44px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.hint{font-size:.82rem;color:var(--soft);background:var(--accent-bg);border-radius:10px;padding:8px 10px;margin:4px 0 12px}
+.hint.warn{background:var(--due-bg);color:var(--due)}
+.err{color:var(--due);font-size:.85rem;min-height:1.2em;margin-bottom:6px}
+.dlg-actions{display:flex;justify-content:flex-end;gap:8px}
+
+@media (max-width:420px){
+  .figs{grid-template-columns:1fr 1fr 1fr}
+  .fig{padding:10px 8px 12px}
+  .fig .v{font-size:.92rem}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Οι δόσεις μου</h1>
+    <div class="acct-box"><span class="sync" id="sync"></span><button class="acct" id="acct" hidden></button></div>
+  </header>
+  <div class="banner" id="banner" hidden></div>
+
+  <section class="hero" aria-labelledby="sumlbl">
+    <div class="pick">
+      <label for="date">Ημερομηνία</label>
+      <div class="pick-ctrl">
+        <button class="icon-btn" id="prev" aria-label="Προηγούμενος μήνας">‹</button>
+        <input type="date" id="date">
+        <button class="icon-btn" id="next" aria-label="Επόμενος μήνας">›</button>
+        <button class="today-btn" id="today">Σήμερα</button>
+      </div>
+    </div>
+    <div class="monthsum">
+      <div class="lbl" id="sumlbl">Σύνολο δόσεων μήνα</div>
+      <div class="amt" id="monthTotal">0,00 €</div>
+      <div class="sub" id="monthSub"></div>
+    </div>
+    <div class="figs">
+      <div class="fig"><div class="lbl" id="remLbl">Υπόλοιπο από εδώ και μετά</div><div class="v" id="remFrom">–</div></div>
+      <div class="fig"><div class="lbl">Πληρώθηκαν μέχρι τώρα</div><div class="v paid" id="paidAll">–</div></div>
+      <div class="fig"><div class="lbl">Πραγματικό υπόλοιπο</div><div class="v" id="remNow">–</div></div>
+    </div>
+  </section>
+
+  <section class="timeline" id="tlSec" hidden>
+    <h2>Πρόγραμμα ανά μήνα</h2>
+    <div class="strip-box" id="stripBox"><div class="strip" id="strip"></div></div>
+    <div class="legend">
+      <span><i style="background:var(--paid)"></i>Πληρωμένος</span>
+      <span><i style="background:var(--due)"></i>Απλήρωτος</span>
+      <span><i style="background:var(--future)"></i>Μελλοντικός</span>
+    </div>
+  </section>
+
+  <section class="list">
+    <div class="list-head"><h2>Οφειλές ρύθμισης</h2><span id="count"></span></div>
+    <div id="debts"></div>
+  </section>
+</div>
+
+<button class="fab" id="addBtn">+ Νέα οφειλή</button>
+
+<dialog id="dlg">
+  <form class="dlg" id="form" method="dialog" novalidate>
+    <h3 id="dlgTitle">Νέα οφειλή</h3>
+    <div class="field"><label for="f_creditor">Φορέας</label><input id="f_creditor" list="creditors" required placeholder="π.χ. ΑΑΔΕ, e-ΕΦΚΑ, doValue"></div>
+    <div class="field"><label for="f_code">Κωδικός πληρωμής</label><input id="f_code" inputmode="text" autocomplete="off" placeholder="π.χ. RF…"></div>
+    <div class="row2">
+      <div class="field"><label for="f_first">Πρώτη δόση</label><input type="date" id="f_first" required></div>
+      <div class="field"><label for="f_last">Τελευταία δόση</label><input type="date" id="f_last" required></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label for="f_amount">Ποσό δόσης (€)</label><input id="f_amount" inputmode="decimal" required placeholder="0,00"></div>
+      <div class="field"><label for="f_total">Συνολική οφειλή (€)</label><input id="f_total" inputmode="decimal" required placeholder="0,00"></div>
+    </div>
+    <div class="hint" id="f_hint">Συμπλήρωσε ημερομηνίες και ποσά για να δεις τον αριθμό δόσεων.</div>
+    <div class="err" id="f_err" role="alert"></div>
+    <div class="dlg-actions">
+      <button type="button" class="btn" id="cancel">Άκυρο</button>
+      <button type="submit" class="btn primary" id="save">Αποθήκευση</button>
+    </div>
+  </form>
+</dialog>
+
+<datalist id="creditors">
+  <option value="ΑΑΔΕ"><option value="e-ΕΦΚΑ"><option value="ΔΥΠΑ"><option value="Δήμος">
+  <option value="doValue"><option value="Cepal"><option value="Intrum"><option value="Qquant"><option value="Pillarstone">
+  <option value="Εθνική Τράπεζα"><option value="Τράπεζα Πειραιώς"><option value="Eurobank"><option value="Alpha Bank">
+</datalist>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, onSnapshot, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+// ==== ΣΤΟΙΧΕΙΑ FIREBASE ====
+// Αντικατέστησε με τα στοιχεία από Firebase Console → Project settings → Your apps → Web app
+const firebaseConfig = {
+  apiKey: "ΒΑΛΕ_ΕΔΩ",
+  authDomain: "ΒΑΛΕ_ΕΔΩ.firebaseapp.com",
+  projectId: "ΒΑΛΕ_ΕΔΩ",
+  storageBucket: "ΒΑΛΕ_ΕΔΩ.appspot.com",
+  messagingSenderId: "ΒΑΛΕ_ΕΔΩ",
+  appId: "ΒΑΛΕ_ΕΔΩ"
+};
+// ===========================
+
+(() => {
+  const MONTHS = ["Ιαν","Φεβ","Μαρ","Απρ","Μάι","Ιουν","Ιουλ","Αυγ","Σεπ","Οκτ","Νοε","Δεκ"];
+  const MONTHS_GEN = ["Ιανουαρίου","Φεβρουαρίου","Μαρτίου","Απριλίου","Μαΐου","Ιουνίου","Ιουλίου","Αυγούστου","Σεπτεμβρίου","Οκτωβρίου","Νοεμβρίου","Δεκεμβρίου"];
+  const MONTHS_NOM = ["Ιανουάριος","Φεβρουάριος","Μάρτιος","Απρίλιος","Μάιος","Ιούνιος","Ιούλιος","Αύγουστος","Σεπτέμβριος","Οκτώβριος","Νοέμβριος","Δεκέμβριος"];
+  const eur = new Intl.NumberFormat("el-GR",{style:"currency",currency:"EUR"});
+  const $ = id => document.getElementById(id);
+
+  let state = { debts: [] };
+  let open = new Set();
+  let editing = null;
+  let saveTimer = null;
+
+  // ---------- date helpers ----------
+  const pad = n => String(n).padStart(2,"0");
+  const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; };
+  const idxOf = s => { const [y,m] = s.split("-").map(Number); return y*12 + (m-1); }; // works for YYYY-MM and YYYY-MM-DD
+  const keyOf = i => `${Math.floor(i/12)}-${pad(i%12+1)}`;
+  const mLabel = i => `${MONTHS[i%12]} ${Math.floor(i/12)}`;
+  const mGen = i => `${MONTHS_GEN[i%12]} ${Math.floor(i/12)}`;
+  const fmtDate = s => { const [y,m,d] = s.split("-"); return `${d}/${m}/${y}`; };
+  const parseNum = s => { if (typeof s === "number") return s; s = String(s).trim().replace(/\s/g,"").replace(/€/g,""); if (s.includes(",")) s = s.replace(/\./g,"").replace(",","."); const n = parseFloat(s); return isFinite(n) ? Math.round(n*100)/100 : NaN; };
+  const r2 = n => Math.round(n*100)/100;
+
+  // ---------- debt math ----------
+  const fIdx = d => idxOf(d.first);
+  const lIdx = d => idxOf(d.last);
+  const nInst = d => lIdx(d) - fIdx(d) + 1;
+  const activeIn = (d,i) => i >= fIdx(d) && i <= lIdx(d);
+  const isPaid = (d,i) => d.paid.includes(keyOf(i));
+  const paidCount = d => d.paid.filter(k => activeIn(d, idxOf(k))).length;
+  const paidAmt = d => Math.min(d.total, r2(paidCount(d) * d.amount));
+  const remNow = d => Math.max(0, r2(d.total - paidAmt(d)));
+  // scheduled remaining from month i onwards (assumes the schedule is followed)
+  const remFrom = (d,i) => { if (i > lIdx(d)) return 0; const before = Math.max(0, Math.min(i - fIdx(d), nInst(d))); return Math.max(0, r2(d.total - before*d.amount)); };
+  const overdue = (d,cur) => { let c = 0; for (let i = fIdx(d); i <= Math.min(cur-1, lIdx(d)); i++) if (!isPaid(d,i)) c++; return c; };
+
+  // ---------- selected date ----------
+  const dateEl = $("date");
+  dateEl.value = todayStr();
+  const selIdx = () => idxOf(dateEl.value || todayStr());
+  const shiftMonth = delta => {
+    const [y,m,d] = (dateEl.value || todayStr()).split("-").map(Number);
+    const i = y*12 + (m-1) + delta; const ny = Math.floor(i/12), nm = i%12;
+    const maxD = new Date(ny, nm+1, 0).getDate();
+    dateEl.value = `${ny}-${pad(nm+1)}-${pad(Math.min(d,maxD))}`; render(true);
+  };
+  $("prev").onclick = () => shiftMonth(-1);
+  $("next").onclick = () => shiftMonth(1);
+  $("today").onclick = () => { dateEl.value = todayStr(); render(true); };
+  dateEl.onchange = () => { if (!dateEl.value) dateEl.value = todayStr(); render(true); };
+
+  // ---------- render ----------
+  function render(scrollStrip){
+    const debts = state.debts;
+    const si = selIdx(), cur = idxOf(todayStr());
+    const active = debts.filter(d => activeIn(d,si));
+    const mTotal = r2(active.reduce((s,d) => s + d.amount, 0));
+    const mPaid = r2(active.filter(d => isPaid(d,si)).reduce((s,d) => s + d.amount, 0));
+
+    $("sumlbl").textContent = `Σύνολο δόσεων ${mGen(si)}`;
+    $("monthTotal").textContent = eur.format(mTotal);
+    $("monthSub").textContent = !debts.length ? "Πρόσθεσε την πρώτη σου οφειλή για να ξεκινήσεις."
+      : !active.length ? "Καμία δόση αυτόν τον μήνα."
+      : `${active.length} ${active.length === 1 ? "δόση" : "δόσεις"} · πληρώθηκαν ${eur.format(mPaid)}, απομένουν ${eur.format(r2(mTotal - mPaid))}`;
+    $("remLbl").textContent = `Υπόλοιπο από ${MONTHS[si%12]} ${Math.floor(si/12)} και μετά`;
+    $("remFrom").textContent = eur.format(r2(debts.reduce((s,d) => s + remFrom(d,si), 0)));
+    $("paidAll").textContent = eur.format(r2(debts.reduce((s,d) => s + paidAmt(d), 0)));
+    $("remNow").textContent = eur.format(r2(debts.reduce((s,d) => s + remNow(d), 0)));
+    $("count").textContent = debts.length ? `${debts.length} ${debts.length === 1 ? "οφειλή" : "οφειλές"}` : "";
+
+    renderStrip(si, cur, scrollStrip);
+    renderList(si, cur);
+  }
+
+  function renderStrip(si, cur, scroll){
+    const debts = state.debts, sec = $("tlSec"), strip = $("strip");
+    if (!debts.length){ sec.hidden = true; return; }
+    sec.hidden = false;
+    let a = Math.min(...debts.map(fIdx), si), b = Math.max(...debts.map(lIdx), si);
+    const totals = [];
+    for (let i = a; i <= b; i++){
+      const act = debts.filter(d => activeIn(d,i));
+      const t = act.reduce((s,d) => s + d.amount, 0);
+      const p = act.filter(d => isPaid(d,i)).reduce((s,d) => s + d.amount, 0);
+      totals.push({i,t,p});
+    }
+    const max = Math.max(1, ...totals.map(x => x.t));
+    strip.innerHTML = "";
+    for (const {i,t,p} of totals){
+      const btn = document.createElement("button");
+      let cls = "bar";
+      if (t > 0){
+        if (p >= t - 0.001) cls += " done";
+        else if (p > 0) cls += " partial";
+        else if (i < cur) cls += " past";
+      }
+      if (i === si) cls += " sel";
+      if (i === cur) cls += " now";
+      btn.className = cls;
+      btn.setAttribute("aria-label", `${MONTHS_NOM[i%12]} ${Math.floor(i/12)}: ${eur.format(t)}`);
+      const h = t > 0 ? Math.max(6, Math.round(t / max * 108)) : 3;
+      const pct = t > 0 ? Math.round(p / t * 100) : 0;
+      btn.innerHTML = `<span class="col" style="height:${h}px;--p:${pct}%"></span><span class="m">${MONTHS[i%12]}</span><span class="y">${(i%12===0 || i===a) ? String(Math.floor(i/12)).slice(2) : ""}</span>`;
+      btn.onclick = () => { const d = Number(dateEl.value.split("-")[2]) || 1; const ny=Math.floor(i/12), nm=i%12; dateEl.value = `${ny}-${pad(nm+1)}-${pad(Math.min(d,new Date(ny,nm+1,0).getDate()))}`; render(false); };
+      strip.appendChild(btn);
+    }
+    if (scroll){
+      requestAnimationFrame(() => {
+        const box = $("stripBox"), sel = strip.querySelector(".sel");
+        if (sel) box.scrollLeft = sel.offsetLeft - box.clientWidth/2 + sel.offsetWidth/2;
+      });
+    }
+  }
+
+  function renderList(si, cur){
+    const wrap = $("debts");
+    wrap.innerHTML = "";
+    if (!state.debts.length){
+      wrap.innerHTML = `<div class="empty"><p>Δεν έχεις καταχωρίσει οφειλές ακόμα. Πρόσθεσε κάθε οφειλή του εξωδικαστικού με τον φορέα, τον κωδικό πληρωμής και τις ημερομηνίες των δόσεων.</p><button class="btn primary" id="emptyAdd">Πρόσθεσε οφειλή</button></div>`;
+      $("emptyAdd").onclick = () => openForm(null);
+      return;
+    }
+    const sorted = [...state.debts].sort((x,y) => (activeIn(y,si) - activeIn(x,si)) || x.creditor.localeCompare(y.creditor,"el"));
+    for (const d of sorted){
+      const act = activeIn(d,si), paidSel = isPaid(d,si), n = nInst(d), pc = paidCount(d), od = overdue(d,cur);
+      const pct = d.total > 0 ? Math.min(100, paidAmt(d) / d.total * 100) : 0;
+      const el = document.createElement("article");
+      el.className = "debt" + (act ? "" : " inactive");
+      const dueDay = d.first.split("-")[2];
+      el.innerHTML = `
+        <div class="drow">
+          <div>
+            <div class="dname"></div>
+            <div class="dmeta">${act ? `Δόση ${si - fIdx(d) + 1} από ${n} · λήξη κάθε ${Number(dueDay)} του μήνα` : (si < fIdx(d) ? `Ξεκινά ${mGen(fIdx(d))}` : `Ολοκληρώθηκε ${mGen(lIdx(d))}`)}</div>
+          </div>
+          <div class="damt"><b>${eur.format(d.amount)}</b><small>τον μήνα</small></div>
+        </div>
+        <div class="prog" aria-hidden="true"><span style="width:${pct}%"></span></div>
+        <div class="dfoot">
+          <div class="nums">Υπόλοιπο <b>${eur.format(remNow(d))}</b> από ${eur.format(d.total)}${od ? `<span class="flag">${od} ${od===1?"απλήρωτη":"απλήρωτες"}</span>` : ""}</div>
+          <button class="paybtn" aria-pressed="${paidSel}" ${act ? "" : "disabled"}><span class="box">${paidSel ? "✓" : ""}</span>${act ? (paidSel ? `Πληρώθηκε ${MONTHS[si%12]}` : `Πλήρωσα ${MONTHS[si%12]}`) : "Εκτός ρύθμισης"}</button>
+        </div>
+        <button class="more" aria-expanded="${open.has(d.id)}">${open.has(d.id) ? "Λιγότερα" : "Λεπτομέρειες και πρόγραμμα"}</button>`;
+      el.querySelector(".dname").textContent = d.creditor;
+      el.querySelector(".paybtn").onclick = () => { if (act) togglePaid(d, si); };
+      el.querySelector(".more").onclick = () => { open.has(d.id) ? open.delete(d.id) : open.add(d.id); render(false); };
+
+      if (open.has(d.id)){
+        const det = document.createElement("div");
+        det.className = "detail";
+        det.innerHTML = `
+          <dl class="kv">
+            <dt>Κωδικός πληρωμής</dt><dd><span class="code"><span class="codetxt"></span><button class="copy">Αντιγραφή</button></span></dd>
+            <dt>Πρώτη δόση</dt><dd>${fmtDate(d.first)}</dd>
+            <dt>Τελευταία δόση</dt><dd>${fmtDate(d.last)}</dd>
+            <dt>Αριθμός δόσεων</dt><dd>${n}</dd>
+            <dt>Πληρωμένες δόσεις</dt><dd>${pc} (${eur.format(paidAmt(d))})</dd>
+            <dt>Υπόλοιπο από ${MONTHS[si%12]} ${Math.floor(si/12)}</dt><dd>${eur.format(remFrom(d,si))}</dd>
+          </dl>
+          <div class="sched-h">Πάτα έναν μήνα για να τον σημειώσεις πληρωμένο ή απλήρωτο.</div>
+          <div class="sched"></div>
+          <div class="dactions">
+            <button class="btn small" data-a="allpast">Πληρωμένες όλες ως ${MONTHS[(cur-1+12)%12]}</button>
+            <button class="btn small" data-a="edit">Επεξεργασία</button>
+            <button class="btn small danger" data-a="del">Διαγραφή</button>
+          </div>`;
+        const ct = det.querySelector(".codetxt"); ct.textContent = d.code || "—";
+        const cb = det.querySelector(".copy");
+        if (!d.code) cb.remove(); else cb.onclick = () => copy(d.code, cb);
+        const grid = det.querySelector(".sched");
+        for (let i = fIdx(d); i <= lIdx(d); i++){
+          const c = document.createElement("button");
+          const p = isPaid(d,i);
+          c.className = "chip" + (p ? " paid" : (i < cur ? " late" : "")) + (i === si ? " sel" : "");
+          c.setAttribute("aria-pressed", p);
+          c.innerHTML = `${MONTHS[i%12]}<br>${Math.floor(i/12)}`;
+          c.onclick = () => togglePaid(d, i);
+          grid.appendChild(c);
+        }
+        det.querySelector('[data-a="edit"]').onclick = () => openForm(d);
+        det.querySelector('[data-a="allpast"]').onclick = () => {
+          const d2 = byId(d.id); if (!d2) return;
+          for (let i = fIdx(d); i <= Math.min(cur-1, lIdx(d)); i++) if (!isPaid(d2,i)) d2.paid.push(keyOf(i));
+          commit();
+        };
+        const del = det.querySelector('[data-a="del"]');
+        del.onclick = () => {
+          if (del.dataset.armed){ state.debts = state.debts.filter(x => x.id !== d.id); open.delete(d.id); commit(); }
+          else { del.dataset.armed = "1"; del.textContent = "Πάτα ξανά για διαγραφή"; setTimeout(() => { if (del.isConnected){ delete del.dataset.armed; del.textContent = "Διαγραφή"; } }, 3500); }
+        };
+        el.appendChild(det);
+      }
+      wrap.appendChild(el);
+    }
+  }
+
+  const byId = id => state.debts.find(x => x.id === id);
+  function togglePaid(dd, i){
+    const d = byId(dd.id); if (!d) return;
+    const k = keyOf(i);
+    d.paid = d.paid.includes(k) ? d.paid.filter(x => x !== k) : [...d.paid, k];
+    commit();
+  }
+
+  function copy(text, btn){
+    const done = () => { btn.textContent = "Αντιγράφηκε"; setTimeout(() => btn.textContent = "Αντιγραφή", 1600); };
+    try {
+      navigator.clipboard.writeText(text).then(done, fallback);
+    } catch(e){ fallback(); }
+    function fallback(){
+      const ta = document.createElement("textarea"); ta.value = text; ta.style.position="fixed"; ta.style.opacity="0";
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); done(); } catch(e){ btn.textContent = "Επίλεξέ το χειροκίνητα"; }
+      ta.remove();
+    }
+  }
+
+  // ---------- form ----------
+  const dlg = $("dlg");
+  const F = k => $("f_"+k);
+  function openForm(d){
+    editing = d;
+    $("dlgTitle").textContent = d ? "Επεξεργασία οφειλής" : "Νέα οφειλή";
+    F("creditor").value = d?.creditor || "";
+    F("code").value = d?.code || "";
+    F("first").value = d?.first || "";
+    F("last").value = d?.last || "";
+    F("amount").value = d ? String(d.amount).replace(".",",") : "";
+    F("total").value = d ? String(d.total).replace(".",",") : "";
+    $("f_err").textContent = "";
+    updateHint();
+    dlg.showModal();
+  }
+  function updateHint(){
+    const h = $("f_hint"), f = F("first").value, l = F("last").value, a = parseNum(F("amount").value), t = parseNum(F("total").value);
+    h.className = "hint";
+    if (!f || !l){ h.textContent = "Συμπλήρωσε ημερομηνίες και ποσά για να δεις τον αριθμό δόσεων."; return; }
+    const n = idxOf(l) - idxOf(f) + 1;
+    if (n < 1){ h.className = "hint warn"; h.textContent = "Η τελευταία δόση πρέπει να είναι μετά την πρώτη."; return; }
+    let msg = `${n} μηνιαίες δόσεις.`;
+    if (a > 0 && t > 0){
+      const sched = r2(n*a), diff = r2(t - sched);
+      msg += ` ${n} × ${eur.format(a)} = ${eur.format(sched)}.`;
+      if (Math.abs(diff) >= 1){ h.className = "hint warn"; msg += ` Διαφέρει ${eur.format(Math.abs(diff))} από τη συνολική οφειλή — έλεγξε τα ποσά στη ρύθμιση.`; }
+    }
+    h.textContent = msg;
+  }
+  ["first","last","amount","total"].forEach(k => F(k).addEventListener("input", updateHint));
+  $("cancel").onclick = () => dlg.close();
+  $("addBtn").onclick = () => openForm(null);
+  $("form").addEventListener("submit", e => {
+    e.preventDefault();
+    const creditor = F("creditor").value.trim(), code = F("code").value.trim(), first = F("first").value, last = F("last").value;
+    const amount = parseNum(F("amount").value), total = parseNum(F("total").value);
+    const err = m => { $("f_err").textContent = m; };
+    if (!creditor) return err("Συμπλήρωσε τον φορέα.");
+    if (!first || !last) return err("Συμπλήρωσε την πρώτη και την τελευταία δόση.");
+    if (idxOf(last) < idxOf(first)) return err("Η τελευταία δόση πρέπει να είναι μετά την πρώτη.");
+    if (!(amount > 0)) return err("Το ποσό της δόσης πρέπει να είναι μεγαλύτερο από 0.");
+    if (!(total > 0)) return err("Η συνολική οφειλή πρέπει να είναι μεγαλύτερη από 0.");
+    const target = editing ? byId(editing.id) : null;
+    if (target){
+      Object.assign(target, {creditor, code, first, last, amount, total});
+      target.paid = target.paid.filter(k => activeIn(target, idxOf(k)));
+    } else {
+      state.debts.push({ id: "d" + Date.now().toString(36) + Math.random().toString(36).slice(2,6), creditor, code, first, last, amount, total, paid: [] });
+    }
+    dlg.close();
+    commit(true);
+  });
+
+  // ---------- storage (localStorage + Firebase) ----------
+  const LS = "doseis-v1";
+  const configured = !String(firebaseConfig.apiKey).startsWith("ΒΑΛΕ");
+  let uid = null, fs = null, auth = null, unsub = null;
+  const setSync = t => { $("sync").textContent = t; };
+  const banner = (t, warn) => { const b = $("banner"); b.hidden = !t; b.textContent = t || ""; b.className = "banner" + (warn ? " warn" : ""); };
+
+  function lsLoad(){ try { const v = localStorage.getItem(LS); return v ? JSON.parse(v) : null; } catch(e){ return null; } }
+  function lsSave(){ try { localStorage.setItem(LS, JSON.stringify({ owner: uid, debts: state.debts })); } catch(e){} }
+  function lsClear(){ try { localStorage.removeItem(LS); } catch(e){} }
+  function sanitize(s){
+    const out = { debts: [] };
+    if (s && Array.isArray(s.debts)) for (const d of s.debts){
+      if (!d || !d.first || !d.last) continue;
+      out.debts.push({ id: String(d.id || Math.random()), creditor: String(d.creditor || ""), code: String(d.code || ""), first: String(d.first), last: String(d.last), amount: Number(d.amount) || 0, total: Number(d.total) || 0, paid: Array.isArray(d.paid) ? d.paid.map(String) : [] });
+    }
+    return out;
+  }
+  const plain = () => JSON.parse(JSON.stringify(state.debts));
+
+  function pushRemote(){
+    if (!uid || !fs) return;
+    setSync("Αποθήκευση…");
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(async () => {
+      try { await setDoc(doc(fs, "doseis", uid), { debts: plain(), updatedAt: serverTimestamp() }); setSync("Συγχρονισμένο"); }
+      catch(e){ setSync("Σφάλμα συγχρονισμού"); console.error(e); }
+    }, 500);
+  }
+  function commit(scroll){ render(!!scroll); lsSave(); pushRemote(); }
+
+  function subscribe(localOwner){
+    let first = true;
+    unsub = onSnapshot(doc(fs, "doseis", uid), snap => {
+      if (snap.metadata.hasPendingWrites) return;
+      const remote = snap.exists() ? sanitize(snap.data()) : { debts: [] };
+      if (first){
+        first = false;
+        // Local data entered without sign-in gets merged once; a cache of this account is replaced by the server copy.
+        if (localOwner !== uid && state.debts.length){
+          const map = new Map(state.debts.map(d => [d.id, d]));
+          remote.debts.forEach(d => map.set(d.id, d));
+          state = { debts: [...map.values()] };
+          lsSave(); render(true); pushRemote();
+          return;
+        }
+      }
+      state = remote; lsSave(); render(first); setSync("Συγχρονισμένο");
+    }, err => { console.error(err); setSync("Σφάλμα συγχρονισμού"); banner("Δεν έγινε σύνδεση με τη βάση. Έλεγξε τους κανόνες ασφαλείας του Firestore.", true); });
+  }
+
+  async function signIn(){
+    const provider = new GoogleAuthProvider();
+    try { await signInWithPopup(auth, provider); }
+    catch(e){
+      if (["auth/popup-blocked","auth/operation-not-supported-in-environment","auth/cancelled-popup-request"].includes(e.code)) return signInWithRedirect(auth, provider);
+      if (e.code === "auth/unauthorized-domain") banner("Πρόσθεσε αυτό το domain στο Firebase: Authentication → Settings → Authorized domains.", true);
+      else if (e.code !== "auth/popup-closed-by-user") banner("Η σύνδεση απέτυχε (" + e.code + ").", true);
+    }
+  }
+
+  function init(){
+    const local = lsLoad();
+    const localOwner = local ? local.owner || null : null;
+    if (local) state = sanitize(local);
+    render(true);
+
+    if (!configured){
+      setSync("Σε αυτή τη συσκευή");
+      banner("Ο συγχρονισμός δεν είναι ενεργός: συμπλήρωσε τα στοιχεία Firebase στον κώδικα. Μέχρι τότε τα δεδομένα μένουν μόνο σε αυτή τη συσκευή.");
+      return;
+    }
+    const app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
+    getRedirectResult(auth).catch(e => console.error(e));
+
+    const acct = $("acct");
+    acct.hidden = false;
+    acct.onclick = async () => {
+      if (uid){
+        if (unsub){ unsub(); unsub = null; }
+        state = { debts: [] }; lsClear(); open.clear(); render(true);
+        await signOut(auth);
+      } else signIn();
+    };
+
+    let firstAuth = true;
+    onAuthStateChanged(auth, user => {
+      if (user){
+        uid = user.uid;
+        acct.textContent = "Αποσύνδεση";
+        acct.title = user.email || "";
+        banner("");
+        setSync("Σύνδεση…");
+        subscribe(firstAuth ? localOwner : null);
+      } else {
+        uid = null;
+        if (unsub){ unsub(); unsub = null; }
+        acct.textContent = "Σύνδεση με Google";
+        setSync("Σε αυτή τη συσκευή");
+        banner("Συνδέσου με Google για να βλέπεις τις οφειλές σου από όλες τις συσκευές.");
+      }
+      firstAuth = false;
+    });
+  }
+  init();
+})();
+</script>
+</body>
+</html>
