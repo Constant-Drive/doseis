@@ -1,10 +1,10 @@
 // Στοιχεία Firebase για την εφαρμογή «Οι δόσεις μου».
 // Αντικατέστησε τις τιμές με αυτές από Firebase Console → Project settings → Your apps.
 export const firebaseConfig = {
-  apiKey: "ΒΑΛΕ_ΕΔΩ",
-  authDomain: "ΒΑΛΕ_ΕΔΩ.firebaseapp.com",
-  projectId: "ΒΑΛΕ_ΕΔΩ",
-  storageBucket: "ΒΑΛΕ_ΕΔΩ.firebasestorage.app",
-  messagingSenderId: "ΒΑΛΕ_ΕΔΩ",
-  appId: "ΒΑΛΕ_ΕΔΩ"
+  apiKey: "AIzaSyDGe8n_oXN-t62Fh6MZJlWvNJ_PJEx1Z1s",
+  authDomain: "doseis-50e8d.firebaseapp.com",
+  projectId: "doseis-50e8d",
+  storageBucket: "doseis-50e8d.firebasestorage.app",
+  messagingSenderId: "677974884849",
+  appId: "1:677974884849:web:c7f2757e7397bcc5f90450"
 };
