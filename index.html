@@ -138,6 +138,11 @@ dialog::backdrop{background:rgba(10,20,30,.45)}
 .hint.warn{background:var(--due-bg);color:var(--due)}
 .err{color:var(--due);font-size:.85rem;min-height:1.2em;margin-bottom:6px}
 .dlg-actions{display:flex;justify-content:flex-end;gap:8px}
+.chg-help{font-size:.82rem;color:var(--soft);margin:0 0 8px}
+.chg{display:grid;grid-template-columns:1fr 1fr 44px;gap:8px;margin-bottom:8px;align-items:center}
+.chg .x{width:44px;height:44px;border:1px solid var(--rule);border-radius:10px;background:var(--paper);font-size:1.2rem;color:var(--due)}
+.chip small{font-size:.7rem;font-weight:500}
+.closebar{width:100%;border:none;border-top:1px solid var(--rule);background:none;padding:12px 14px;color:var(--accent);font-weight:600;font-size:.9rem}
 
 @media (max-width:420px){
   .figs{grid-template-columns:1fr 1fr 1fr}
@@ -205,8 +210,14 @@ dialog::backdrop{background:rgba(10,20,30,.45)}
       <div class="field"><label for="f_last">Τελευταία δόση</label><input type="date" id="f_last" required></div>
     </div>
     <div class="row2">
-      <div class="field"><label for="f_amount">Ποσό δόσης (€)</label><input id="f_amount" inputmode="decimal" required placeholder="0,00"></div>
+      <div class="field"><label for="f_amount">Αρχικό ποσό δόσης (€)</label><input id="f_amount" inputmode="decimal" required placeholder="0,00"></div>
       <div class="field"><label for="f_total">Συνολική οφειλή (€)</label><input id="f_total" inputmode="decimal" required placeholder="0,00"></div>
+    </div>
+    <div class="field">
+      <label>Αλλαγές ποσού δόσης</label>
+      <p class="chg-help">Αν η δόση αλλάζει κατά τη διάρκεια της ρύθμισης, πρόσθεσε από ποιον μήνα ισχύει το νέο ποσό. Ισχύει μέχρι την επόμενη αλλαγή ή το τέλος.</p>
+      <div id="f_changes"></div>
+      <button type="button" class="btn small" id="f_addChange">+ Προσθήκη αλλαγής ποσού</button>
     </div>
     <div class="hint" id="f_hint">Συμπλήρωσε ημερομηνίες και ποσά για να δεις τον αριθμό δόσεων.</div>
     <div class="err" id="f_err" role="alert"></div>
@@ -228,17 +239,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/fireba
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, onSnapshot, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-// ==== ΣΤΟΙΧΕΙΑ FIREBASE ====
-// Αντικατέστησε με τα στοιχεία από Firebase Console → Project settings → Your apps → Web app
-const firebaseConfig = {
-  apiKey: "AIzaSyDGe8n_oXN-t62Fh6MZJlWvNJ_PJEx1Z1s",
-  authDomain: "doseis-50e8d.firebaseapp.com",
-  projectId: "doseis-50e8d",
-  storageBucket: "doseis-50e8d.firebasestorage.app",
-  messagingSenderId: "677974884849",
-  appId: "1:677974884849:web:c7f2757e7397bcc5f90450"
-};
-// ===========================
+// Τα στοιχεία Firebase βρίσκονται στο ξεχωριστό αρχείο firebase-config.js
+let firebaseConfig = null;
+try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { console.warn("firebase-config.js not found", e); }
 
 (() => {
   const MONTHS = ["Ιαν","Φεβ","Μαρ","Απρ","Μάι","Ιουν","Ιουλ","Αυγ","Σεπ","Οκτ","Νοε","Δεκ"];
@@ -270,10 +273,14 @@ const firebaseConfig = {
   const activeIn = (d,i) => i >= fIdx(d) && i <= lIdx(d);
   const isPaid = (d,i) => d.paid.includes(keyOf(i));
   const paidCount = d => d.paid.filter(k => activeIn(d, idxOf(k))).length;
-  const paidAmt = d => Math.min(d.total, r2(paidCount(d) * d.amount));
+  const amtAt = (d,i) => { let a = d.amount, best = -Infinity; for (const c of (d.changes || [])){ const ci = idxOf(c.from); if (ci <= i && ci >= best){ best = ci; a = c.amount; } } return a; };
+  const hasChanges = d => (d.changes || []).length > 0;
+  const schedSum = (d,a,b) => { let s = 0; for (let i = Math.max(a, fIdx(d)); i <= Math.min(b, lIdx(d)); i++) s += amtAt(d,i); return r2(s); };
+  const paidAmt = d => Math.min(d.total, r2(d.paid.filter(k => activeIn(d, idxOf(k))).reduce((s,k) => s + amtAt(d, idxOf(k)), 0)));
+  const shortEur = n => n.toLocaleString("el-GR", {maximumFractionDigits: 2}) + "€";
   const remNow = d => Math.max(0, r2(d.total - paidAmt(d)));
   // scheduled remaining from month i onwards (assumes the schedule is followed)
-  const remFrom = (d,i) => { if (i > lIdx(d)) return 0; const before = Math.max(0, Math.min(i - fIdx(d), nInst(d))); return Math.max(0, r2(d.total - before*d.amount)); };
+  const remFrom = (d,i) => { if (i > lIdx(d)) return 0; return Math.max(0, r2(d.total - schedSum(d, fIdx(d), i - 1))); };
   const overdue = (d,cur) => { let c = 0; for (let i = fIdx(d); i <= Math.min(cur-1, lIdx(d)); i++) if (!isPaid(d,i)) c++; return c; };
 
   // ---------- selected date ----------
@@ -296,8 +303,8 @@ const firebaseConfig = {
     const debts = state.debts;
     const si = selIdx(), cur = idxOf(todayStr());
     const active = debts.filter(d => activeIn(d,si));
-    const mTotal = r2(active.reduce((s,d) => s + d.amount, 0));
-    const mPaid = r2(active.filter(d => isPaid(d,si)).reduce((s,d) => s + d.amount, 0));
+    const mTotal = r2(active.reduce((s,d) => s + amtAt(d,si), 0));
+    const mPaid = r2(active.filter(d => isPaid(d,si)).reduce((s,d) => s + amtAt(d,si), 0));
 
     $("sumlbl").textContent = `Σύνολο δόσεων ${mGen(si)}`;
     $("monthTotal").textContent = eur.format(mTotal);
@@ -322,8 +329,8 @@ const firebaseConfig = {
     const totals = [];
     for (let i = a; i <= b; i++){
       const act = debts.filter(d => activeIn(d,i));
-      const t = act.reduce((s,d) => s + d.amount, 0);
-      const p = act.filter(d => isPaid(d,i)).reduce((s,d) => s + d.amount, 0);
+      const t = act.reduce((s,d) => s + amtAt(d,i), 0);
+      const p = act.filter(d => isPaid(d,i)).reduce((s,d) => s + amtAt(d,i), 0);
       totals.push({i,t,p});
     }
     const max = Math.max(1, ...totals.map(x => x.t));
@@ -368,6 +375,7 @@ const firebaseConfig = {
       const pct = d.total > 0 ? Math.min(100, paidAmt(d) / d.total * 100) : 0;
       const el = document.createElement("article");
       el.className = "debt" + (act ? "" : " inactive");
+      el.dataset.id = d.id;
       const dueDay = d.first.split("-")[2];
       el.innerHTML = `
         <div class="drow">
@@ -375,14 +383,14 @@ const firebaseConfig = {
             <div class="dname"></div>
             <div class="dmeta">${act ? `Δόση ${si - fIdx(d) + 1} από ${n} · λήξη κάθε ${Number(dueDay)} του μήνα` : (si < fIdx(d) ? `Ξεκινά ${mGen(fIdx(d))}` : `Ολοκληρώθηκε ${mGen(lIdx(d))}`)}</div>
           </div>
-          <div class="damt"><b>${eur.format(d.amount)}</b><small>τον μήνα</small></div>
+          <div class="damt"><b>${eur.format(amtAt(d, Math.min(Math.max(si, fIdx(d)), lIdx(d))))}</b><small>${hasChanges(d) ? "μεταβλητή δόση" : "τον μήνα"}</small></div>
         </div>
         <div class="prog" aria-hidden="true"><span style="width:${pct}%"></span></div>
         <div class="dfoot">
           <div class="nums">Υπόλοιπο <b>${eur.format(remNow(d))}</b> από ${eur.format(d.total)}${od ? `<span class="flag">${od} ${od===1?"απλήρωτη":"απλήρωτες"}</span>` : ""}</div>
           <button class="paybtn" aria-pressed="${paidSel}" ${act ? "" : "disabled"}><span class="box">${paidSel ? "✓" : ""}</span>${act ? (paidSel ? `Πληρώθηκε ${MONTHS[si%12]}` : `Πλήρωσα ${MONTHS[si%12]}`) : "Εκτός ρύθμισης"}</button>
         </div>
-        <button class="more" aria-expanded="${open.has(d.id)}">${open.has(d.id) ? "Λιγότερα" : "Λεπτομέρειες και πρόγραμμα"}</button>`;
+        <button class="more" aria-expanded="${open.has(d.id)}">${open.has(d.id) ? "▴ Κλείσιμο λεπτομερειών" : "▾ Λεπτομέρειες και πρόγραμμα"}</button>`;
       el.querySelector(".dname").textContent = d.creditor;
       el.querySelector(".paybtn").onclick = () => { if (act) togglePaid(d, si); };
       el.querySelector(".more").onclick = () => { open.has(d.id) ? open.delete(d.id) : open.add(d.id); render(false); };
@@ -396,6 +404,8 @@ const firebaseConfig = {
             <dt>Πρώτη δόση</dt><dd>${fmtDate(d.first)}</dd>
             <dt>Τελευταία δόση</dt><dd>${fmtDate(d.last)}</dd>
             <dt>Αριθμός δόσεων</dt><dd>${n}</dd>
+            <dt>Σύνολο προγράμματος</dt><dd>${eur.format(schedSum(d, fIdx(d), lIdx(d)))}</dd>
+            ${hasChanges(d) ? `<dt>Ποσά δόσης</dt><dd>${[{from: d.first.slice(0,7), amount: d.amount}, ...d.changes].map(c => `από ${mLabel(idxOf(c.from))}: ${eur.format(c.amount)}`).join("<br>")}</dd>` : ""}
             <dt>Πληρωμένες δόσεις</dt><dd>${pc} (${eur.format(paidAmt(d))})</dd>
             <dt>Υπόλοιπο από ${MONTHS[si%12]} ${Math.floor(si/12)}</dt><dd>${eur.format(remFrom(d,si))}</dd>
           </dl>
@@ -415,7 +425,7 @@ const firebaseConfig = {
           const p = isPaid(d,i);
           c.className = "chip" + (p ? " paid" : (i < cur ? " late" : "")) + (i === si ? " sel" : "");
           c.setAttribute("aria-pressed", p);
-          c.innerHTML = `${MONTHS[i%12]}<br>${Math.floor(i/12)}`;
+          c.innerHTML = `${MONTHS[i%12]}<br>${Math.floor(i/12)}${hasChanges(d) ? `<br><small>${shortEur(amtAt(d,i))}</small>` : ""}`;
           c.onclick = () => togglePaid(d, i);
           grid.appendChild(c);
         }
@@ -430,6 +440,10 @@ const firebaseConfig = {
           if (del.dataset.armed){ state.debts = state.debts.filter(x => x.id !== d.id); open.delete(d.id); commit(); }
           else { del.dataset.armed = "1"; del.textContent = "Πάτα ξανά για διαγραφή"; setTimeout(() => { if (del.isConnected){ delete del.dataset.armed; del.textContent = "Διαγραφή"; } }, 3500); }
         };
+        const cl = document.createElement("button");
+        cl.className = "closebar"; cl.textContent = "▴ Κλείσιμο λεπτομερειών";
+        cl.onclick = () => { open.delete(d.id); render(false); const card = document.querySelector(`.debt[data-id="${d.id}"]`); if (card) card.scrollIntoView({block: "nearest"}); };
+        det.appendChild(cl);
         el.appendChild(det);
       }
       wrap.appendChild(el);
@@ -469,10 +483,30 @@ const firebaseConfig = {
     F("last").value = d?.last || "";
     F("amount").value = d ? String(d.amount).replace(".",",") : "";
     F("total").value = d ? String(d.total).replace(".",",") : "";
+    $("f_changes").innerHTML = "";
+    (d?.changes || []).forEach(c => addChangeRow(c.from, String(c.amount).replace(".",",")));
     $("f_err").textContent = "";
     updateHint();
     dlg.showModal();
   }
+  const parseMonth = v => { v = String(v || "").trim(); let m;
+    if ((m = v.match(/^(\d{4})-(\d{1,2})$/))) return `${m[1]}-${pad(+m[2])}`;
+    if ((m = v.match(/^(\d{1,2})[\/.\-](\d{4})$/))) return `${m[2]}-${pad(+m[1])}`;
+    return null; };
+  function addChangeRow(from = "", amount = ""){
+    const row = document.createElement("div");
+    row.className = "chg";
+    row.innerHTML = `<input type="month" class="c_from" aria-label="Από μήνα" placeholder="ΕΕΕΕ-ΜΜ"><input class="c_amt" inputmode="decimal" placeholder="Νέο ποσό €" aria-label="Νέο ποσό δόσης"><button type="button" class="x" aria-label="Αφαίρεση αλλαγής">×</button>`;
+    row.querySelector(".c_from").value = from;
+    row.querySelector(".c_amt").value = amount;
+    row.querySelector(".x").onclick = () => { row.remove(); updateHint(); };
+    row.querySelectorAll("input").forEach(x => x.addEventListener("input", updateHint));
+    $("f_changes").appendChild(row);
+  }
+  $("f_addChange").onclick = () => { addChangeRow(); const rows = $("f_changes").querySelectorAll(".c_from"); rows[rows.length - 1].focus(); };
+  const readChanges = () => [...document.querySelectorAll("#f_changes .chg")]
+    .map(r => ({ rawFrom: r.querySelector(".c_from").value, from: parseMonth(r.querySelector(".c_from").value), amount: parseNum(r.querySelector(".c_amt").value), empty: !r.querySelector(".c_from").value.trim() && !r.querySelector(".c_amt").value.trim() }))
+    .filter(c => !c.empty);
   function updateHint(){
     const h = $("f_hint"), f = F("first").value, l = F("last").value, a = parseNum(F("amount").value), t = parseNum(F("total").value);
     h.className = "hint";
@@ -480,9 +514,10 @@ const firebaseConfig = {
     const n = idxOf(l) - idxOf(f) + 1;
     if (n < 1){ h.className = "hint warn"; h.textContent = "Η τελευταία δόση πρέπει να είναι μετά την πρώτη."; return; }
     let msg = `${n} μηνιαίες δόσεις.`;
+    const ch = readChanges().filter(c => c.from && c.amount > 0).map(c => ({from: c.from, amount: c.amount}));
     if (a > 0 && t > 0){
-      const sched = r2(n*a), diff = r2(t - sched);
-      msg += ` ${n} × ${eur.format(a)} = ${eur.format(sched)}.`;
+      const sched = ch.length ? schedSum({first: f, last: l, amount: a, changes: ch}, idxOf(f), idxOf(l)) : r2(n*a), diff = r2(t - sched);
+      msg += ch.length ? ` Σύνολο προγράμματος με τις αλλαγές: ${eur.format(sched)}.` : ` ${n} × ${eur.format(a)} = ${eur.format(sched)}.`;
       if (Math.abs(diff) >= 1){ h.className = "hint warn"; msg += ` Διαφέρει ${eur.format(Math.abs(diff))} από τη συνολική οφειλή — έλεγξε τα ποσά στη ρύθμιση.`; }
     }
     h.textContent = msg;
@@ -500,12 +535,20 @@ const firebaseConfig = {
     if (idxOf(last) < idxOf(first)) return err("Η τελευταία δόση πρέπει να είναι μετά την πρώτη.");
     if (!(amount > 0)) return err("Το ποσό της δόσης πρέπει να είναι μεγαλύτερο από 0.");
     if (!(total > 0)) return err("Η συνολική οφειλή πρέπει να είναι μεγαλύτερη από 0.");
+    const rawCh = readChanges();
+    for (const c of rawCh){
+      if (!c.from) return err("Συμπλήρωσε σωστά τον μήνα σε κάθε αλλαγή ποσού (π.χ. 2027-01).");
+      if (!(c.amount > 0)) return err("Συμπλήρωσε το νέο ποσό σε κάθε αλλαγή ποσού.");
+      if (idxOf(c.from) <= idxOf(first) || idxOf(c.from) > idxOf(last)) return err("Κάθε αλλαγή ποσού πρέπει να ξεκινά μετά την πρώτη δόση και μέχρι την τελευταία.");
+    }
+    const chMap = new Map(); rawCh.sort((x,y) => idxOf(x.from) - idxOf(y.from)).forEach(c => chMap.set(c.from, c.amount));
+    const changes = [...chMap].map(([from, amount]) => ({from, amount}));
     const target = editing ? byId(editing.id) : null;
     if (target){
-      Object.assign(target, {creditor, code, first, last, amount, total});
+      Object.assign(target, {creditor, code, first, last, amount, total, changes});
       target.paid = target.paid.filter(k => activeIn(target, idxOf(k)));
     } else {
-      state.debts.push({ id: "d" + Date.now().toString(36) + Math.random().toString(36).slice(2,6), creditor, code, first, last, amount, total, paid: [] });
+      state.debts.push({ id: "d" + Date.now().toString(36) + Math.random().toString(36).slice(2,6), creditor, code, first, last, amount, total, paid: [], changes });
     }
     dlg.close();
     commit(true);
@@ -513,7 +556,7 @@ const firebaseConfig = {
 
   // ---------- storage (localStorage + Firebase) ----------
   const LS = "doseis-v1";
-  const configured = !String(firebaseConfig.apiKey).startsWith("ΒΑΛΕ");
+  const configured = !!(firebaseConfig && firebaseConfig.apiKey && !String(firebaseConfig.apiKey).startsWith("ΒΑΛΕ"));
   let uid = null, fs = null, auth = null, unsub = null;
   const setSync = t => { $("sync").textContent = t; };
   const banner = (t, warn) => { const b = $("banner"); b.hidden = !t; b.textContent = t || ""; b.className = "banner" + (warn ? " warn" : ""); };
@@ -525,7 +568,7 @@ const firebaseConfig = {
     const out = { debts: [] };
     if (s && Array.isArray(s.debts)) for (const d of s.debts){
       if (!d || !d.first || !d.last) continue;
-      out.debts.push({ id: String(d.id || Math.random()), creditor: String(d.creditor || ""), code: String(d.code || ""), first: String(d.first), last: String(d.last), amount: Number(d.amount) || 0, total: Number(d.total) || 0, paid: Array.isArray(d.paid) ? d.paid.map(String) : [] });
+      out.debts.push({ id: String(d.id || Math.random()), creditor: String(d.creditor || ""), code: String(d.code || ""), first: String(d.first), last: String(d.last), amount: Number(d.amount) || 0, total: Number(d.total) || 0, paid: Array.isArray(d.paid) ? d.paid.map(String) : [], changes: Array.isArray(d.changes) ? d.changes.filter(c => c && c.from).map(c => ({from: String(c.from), amount: Number(c.amount) || 0})) : [] });
     }
     return out;
   }
@@ -580,7 +623,7 @@ const firebaseConfig = {
 
     if (!configured){
       setSync("Σε αυτή τη συσκευή");
-      banner("Ο συγχρονισμός δεν είναι ενεργός: συμπλήρωσε τα στοιχεία Firebase στον κώδικα. Μέχρι τότε τα δεδομένα μένουν μόνο σε αυτή τη συσκευή.");
+      banner("Ο συγχρονισμός δεν είναι ενεργός: λείπει ή δεν έχει συμπληρωθεί το αρχείο firebase-config.js. Μέχρι τότε τα δεδομένα μένουν μόνο σε αυτή τη συσκευή.");
       return;
     }
     const app = initializeApp(firebaseConfig);
