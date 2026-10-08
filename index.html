@@ -55,6 +55,17 @@ h1{font-size:1.35rem;font-weight:700;margin:0;letter-spacing:-.01em}
 .monthsum .lbl{font-size:.95rem;color:var(--soft)}
 .monthsum .amt{font-size:clamp(2.2rem,9vw,3rem);font-weight:700;letter-spacing:-.02em;line-height:1.1}
 .monthsum .sub{font-size:.9rem;color:var(--soft);margin-top:2px}
+.monthsum .amt.zero{color:var(--paid)}
+.mprog{height:6px;background:var(--rule);border-radius:3px;overflow:hidden;margin:10px 0 6px;max-width:340px}
+.mprog span{display:block;height:100%;background:var(--paid);border-radius:3px;transition:width .25s}
+.late{background:var(--due-bg);border-radius:12px;padding:12px 12px 6px;margin-top:12px}
+.late h3{font-size:.95rem;color:var(--due);margin:0 0 2px}
+.late .note{font-size:.8rem;color:var(--due);margin:0 0 6px}
+.lrow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--rule)}
+.lrow .n{font-size:.9rem;font-weight:600;line-height:1.25}
+.lrow .n small{display:block;font-weight:400;color:var(--soft);font-size:.8rem}
+.lrow button{border:1px solid var(--due);background:var(--card);color:var(--due);border-radius:999px;padding:6px 12px;font-size:.82rem;font-weight:600;white-space:nowrap;min-height:36px}
+.late .warn3{font-size:.8rem;color:var(--due);border-top:1px solid var(--rule);padding:8px 0 4px;margin:0}
 .figs{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--rule);border-top:1px solid var(--rule);margin:14px -18px 0}
 .fig{background:var(--card);padding:12px 12px 14px}
 .fig .lbl{font-size:.78rem;color:var(--soft);line-height:1.25}
@@ -138,6 +149,11 @@ dialog::backdrop{background:rgba(10,20,30,.45)}
 .hint.warn{background:var(--due-bg);color:var(--due)}
 .err{color:var(--due);font-size:.85rem;min-height:1.2em;margin-bottom:6px}
 .dlg-actions{display:flex;justify-content:flex-end;gap:8px}
+.field.auto input{background:var(--accent-bg);border-color:transparent;color:var(--accent);font-weight:600}
+.field.auto label::after{content:" · αυτόματο";color:var(--accent);font-weight:600}
+.form-help{font-size:.85rem;color:var(--soft);margin:-6px 0 14px}
+.hint .fix{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.hint .fix button{border:1px solid currentColor;background:var(--card);color:inherit;border-radius:999px;padding:5px 11px;font-size:.8rem;font-weight:600}
 .chg-help{font-size:.82rem;color:var(--soft);margin:0 0 8px}
 .chg{display:grid;grid-template-columns:1fr 1fr 44px;gap:8px;margin-bottom:8px;align-items:center}
 .chg .x{width:44px;height:44px;border:1px solid var(--rule);border-radius:10px;background:var(--paper);font-size:1.2rem;color:var(--due)}
@@ -171,10 +187,12 @@ dialog::backdrop{background:rgba(10,20,30,.45)}
       </div>
     </div>
     <div class="monthsum">
-      <div class="lbl" id="sumlbl">Σύνολο δόσεων μήνα</div>
-      <div class="amt" id="monthTotal">0,00 €</div>
+      <div class="lbl" id="sumlbl">Απομένουν να πληρώσεις</div>
+      <div class="amt" id="leftAmt">0,00 €</div>
+      <div class="mprog" id="mprog" hidden><span></span></div>
       <div class="sub" id="monthSub"></div>
     </div>
+    <div class="late" id="lateBox" hidden></div>
     <div class="figs">
       <div class="fig"><div class="lbl" id="remLbl">Υπόλοιπο από εδώ και μετά</div><div class="v" id="remFrom">–</div></div>
       <div class="fig"><div class="lbl">Πληρώθηκαν μέχρι τώρα</div><div class="v paid" id="paidAll">–</div></div>
@@ -205,21 +223,23 @@ dialog::backdrop{background:rgba(10,20,30,.45)}
     <h3 id="dlgTitle">Νέα οφειλή</h3>
     <div class="field"><label for="f_creditor">Φορέας</label><input id="f_creditor" list="creditors" required placeholder="π.χ. ΑΑΔΕ, e-ΕΦΚΑ, doValue"></div>
     <div class="field"><label for="f_code">Κωδικός πληρωμής</label><input id="f_code" inputmode="text" autocomplete="off" placeholder="π.χ. RF…"></div>
+    <p class="form-help">Συμπλήρωσε ό,τι γνωρίζεις — τα υπόλοιπα υπολογίζονται αυτόματα (π.χ. πρώτη δόση + αριθμός δόσεων + ποσό δόσης).</p>
     <div class="row2">
-      <div class="field"><label for="f_first">Πρώτη δόση</label><input type="date" id="f_first" required></div>
-      <div class="field"><label for="f_last">Τελευταία δόση</label><input type="date" id="f_last" required></div>
+      <div class="field"><label for="f_first">Πρώτη δόση</label><input type="date" id="f_first"></div>
+      <div class="field"><label for="f_last">Τελευταία δόση</label><input type="date" id="f_last"></div>
     </div>
     <div class="row2">
-      <div class="field"><label for="f_amount">Αρχικό ποσό δόσης (€)</label><input id="f_amount" inputmode="decimal" required placeholder="0,00"></div>
-      <div class="field"><label for="f_total">Συνολική οφειλή (€)</label><input id="f_total" inputmode="decimal" required placeholder="0,00"></div>
+      <div class="field"><label for="f_n">Αριθμός δόσεων</label><input id="f_n" inputmode="numeric" placeholder="π.χ. 120"></div>
+      <div class="field"><label for="f_amount">Ποσό δόσης (€)</label><input id="f_amount" inputmode="decimal" placeholder="0,00"></div>
     </div>
+    <div class="field"><label for="f_total">Συνολική οφειλή (€)</label><input id="f_total" inputmode="decimal" placeholder="0,00"></div>
     <div class="field">
       <label>Αλλαγές ποσού δόσης</label>
       <p class="chg-help">Αν η δόση αλλάζει κατά τη διάρκεια της ρύθμισης, πρόσθεσε από ποιον μήνα ισχύει το νέο ποσό. Ισχύει μέχρι την επόμενη αλλαγή ή το τέλος.</p>
       <div id="f_changes"></div>
       <button type="button" class="btn small" id="f_addChange">+ Προσθήκη αλλαγής ποσού</button>
     </div>
-    <div class="hint" id="f_hint">Συμπλήρωσε ημερομηνίες και ποσά για να δεις τον αριθμό δόσεων.</div>
+    <div class="hint" id="f_hint">Συμπλήρωσε τα στοιχεία που γνωρίζεις.</div>
     <div class="err" id="f_err" role="alert"></div>
     <div class="dlg-actions">
       <button type="button" class="btn" id="cancel">Άκυρο</button>
@@ -306,11 +326,44 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
     const mTotal = r2(active.reduce((s,d) => s + amtAt(d,si), 0));
     const mPaid = r2(active.filter(d => isPaid(d,si)).reduce((s,d) => s + amtAt(d,si), 0));
 
-    $("sumlbl").textContent = `Σύνολο δόσεων ${mGen(si)}`;
-    $("monthTotal").textContent = eur.format(mTotal);
+    const leftMonth = r2(mTotal - mPaid);
+    // unpaid installments from earlier months (before the selected month and before today)
+    const late = [];
+    for (const d of debts){
+      for (let i = fIdx(d); i <= Math.min(Math.min(si, cur) - 1, lIdx(d)); i++) if (!isPaid(d,i)) late.push({d, i, amt: amtAt(d,i)});
+    }
+    late.sort((x,y) => x.i - y.i);
+    const lateSum = r2(late.reduce((s,x) => s + x.amt, 0));
+    const left = r2(leftMonth + lateSum);
+
+    $("sumlbl").textContent = `Απομένουν να πληρώσεις · ${MONTHS_NOM[si%12]} ${Math.floor(si/12)}`;
+    const amtEl = $("leftAmt");
+    amtEl.textContent = eur.format(left);
+    amtEl.classList.toggle("zero", left === 0 && (mTotal > 0 || debts.length > 0));
+    const mp = $("mprog");
+    mp.hidden = !(mTotal > 0);
+    if (mTotal > 0) mp.firstElementChild.style.width = Math.min(100, mPaid / mTotal * 100) + "%";
     $("monthSub").textContent = !debts.length ? "Πρόσθεσε την πρώτη σου οφειλή για να ξεκινήσεις."
-      : !active.length ? "Καμία δόση αυτόν τον μήνα."
-      : `${active.length} ${active.length === 1 ? "δόση" : "δόσεις"} · πληρώθηκαν ${eur.format(mPaid)}, απομένουν ${eur.format(r2(mTotal - mPaid))}`;
+      : !active.length ? (lateSum ? "Καμία δόση αυτόν τον μήνα — μόνο καθυστερούμενες." : "Καμία δόση αυτόν τον μήνα.")
+      : leftMonth === 0 ? `Πληρώθηκαν όλες οι δόσεις του μήνα (${eur.format(mTotal)}) ✓`
+      : `Δόσεις μήνα ${eur.format(mTotal)} · πληρώθηκαν ${eur.format(mPaid)} · απομένουν ${eur.format(leftMonth)}`;
+
+    const lb = $("lateBox");
+    lb.hidden = !late.length;
+    lb.innerHTML = "";
+    if (late.length){
+      lb.insertAdjacentHTML("beforeend", `<h3>Καθυστερούμενες δόσεις: ${late.length} · ${eur.format(lateSum)}</h3><p class="note">Από προηγούμενους μήνες — περιλαμβάνονται στο ποσό πάνω.</p>`);
+      for (const x of late){
+        const row = document.createElement("div");
+        row.className = "lrow";
+        row.innerHTML = `<div class="n"><span></span><small>${mLabel(x.i)} · ${eur.format(x.amt)}</small></div><button>Πλήρωσα</button>`;
+        row.querySelector("span").textContent = x.d.creditor;
+        row.querySelector("button").onclick = () => togglePaid(x.d, x.i);
+        lb.appendChild(row);
+      }
+      if (debts.some(d => late.filter(x => x.d === d).length >= 2))
+        lb.insertAdjacentHTML("beforeend", `<p class="warn3">Προσοχή: σε πολλές ρυθμίσεις, αν οι απλήρωτες δόσεις φτάσουν το ποσό τριών δόσεων, η ρύθμιση μπορεί να χαθεί. Έλεγξε τους όρους της δικής σου.</p>`);
+    }
     $("remLbl").textContent = `Υπόλοιπο από ${MONTHS[si%12]} ${Math.floor(si/12)} και μετά`;
     $("remFrom").textContent = eur.format(r2(debts.reduce((s,d) => s + remFrom(d,si), 0)));
     $("paidAll").textContent = eur.format(r2(debts.reduce((s,d) => s + paidAmt(d), 0)));
@@ -485,8 +538,11 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
     F("total").value = d ? String(d.total).replace(".",",") : "";
     $("f_changes").innerHTML = "";
     (d?.changes || []).forEach(c => addChangeRow(c.from, String(c.amount).replace(".",",")));
+    F("n").value = "";
+    // stored values count as typed; order = which one gives way first if the dates conflict with a typed number of installments
+    manual = d ? ["last", "total", "first", "amount"] : [];
     $("f_err").textContent = "";
-    updateHint();
+    recalc();
     dlg.showModal();
   }
   const parseMonth = v => { v = String(v || "").trim(); let m;
@@ -499,30 +555,84 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
     row.innerHTML = `<input type="month" class="c_from" aria-label="Από μήνα" placeholder="ΕΕΕΕ-ΜΜ"><input class="c_amt" inputmode="decimal" placeholder="Νέο ποσό €" aria-label="Νέο ποσό δόσης"><button type="button" class="x" aria-label="Αφαίρεση αλλαγής">×</button>`;
     row.querySelector(".c_from").value = from;
     row.querySelector(".c_amt").value = amount;
-    row.querySelector(".x").onclick = () => { row.remove(); updateHint(); };
-    row.querySelectorAll("input").forEach(x => x.addEventListener("input", updateHint));
+    row.querySelector(".x").onclick = () => { row.remove(); recalc(); };
+    row.querySelectorAll("input").forEach(x => x.addEventListener("input", recalc));
     $("f_changes").appendChild(row);
   }
   $("f_addChange").onclick = () => { addChangeRow(); const rows = $("f_changes").querySelectorAll(".c_from"); rows[rows.length - 1].focus(); };
   const readChanges = () => [...document.querySelectorAll("#f_changes .chg")]
     .map(r => ({ rawFrom: r.querySelector(".c_from").value, from: parseMonth(r.querySelector(".c_from").value), amount: parseNum(r.querySelector(".c_amt").value), empty: !r.querySelector(".c_from").value.trim() && !r.querySelector(".c_amt").value.trim() }))
     .filter(c => !c.empty);
+  // ---------- auto-calculation of missing fields ----------
+  const CALC = ["first", "last", "n", "amount", "total"];
+  let manual = [];
+  const isM = k => manual.includes(k);
+  const validChanges = () => readChanges().filter(c => c.from && c.amount > 0).map(c => ({from: c.from, amount: c.amount}));
+  const addMonths = (ds, delta) => { const [y,m,d] = ds.split("-").map(Number); const i = y*12 + m - 1 + delta; const ny = Math.floor(i/12), nm = i%12; return `${ny}-${pad(nm+1)}-${pad(Math.min(d, new Date(ny, nm+1, 0).getDate()))}`; };
+  const fmtIn = n => String(r2(n)).replace(".", ",");
+  function setField(k, v, auto){ F(k).value = v; F(k).closest(".field").classList.toggle("auto", !!auto && v !== ""); }
+
+  function solve(){
+    // first / last / number of installments: if all three were typed, the one typed longest ago gives way
+    const dt = ["first", "last", "n"];
+    if (dt.every(isM)){ const oldest = manual.find(k => dt.includes(k)); manual = manual.filter(k => k !== oldest); }
+    for (const k of CALC) if (!isM(k)) setField(k, "", false);
+    const ch = validChanges();
+    let first = isM("first") ? F("first").value : "";
+    let last = isM("last") ? F("last").value : "";
+    let n = isM("n") ? parseInt(F("n").value, 10) : NaN;
+    let amount = isM("amount") ? parseNum(F("amount").value) : NaN;
+    let total = isM("total") ? parseNum(F("total").value) : NaN;
+    if (!(n > 0)) n = NaN;
+    for (let pass = 0; pass < 2; pass++){
+      if (!(n > 0) && first && last){ const k = idxOf(last) - idxOf(first) + 1; if (k > 0) n = k; }
+      if (!(n > 0) && amount > 0 && total > 0 && !ch.length) n = Math.ceil(r2(total / amount) - 1e-9);
+      if (n > 0 && first && !last) last = addMonths(first, n - 1);
+      if (n > 0 && last && !first) first = addMonths(last, -(n - 1));
+      if (n > 0 && amount > 0 && !(total > 0)) total = (ch.length && first) ? schedSum({first, last: addMonths(first, n - 1), amount, changes: ch}, idxOf(first), idxOf(first) + n - 1) : r2(n * amount);
+      if (n > 0 && total > 0 && !(amount > 0) && !ch.length) amount = r2(total / n);
+    }
+    if (!isM("first") && first) setField("first", first, true);
+    if (!isM("last") && last) setField("last", last, true);
+    if (!isM("n") && n > 0) setField("n", String(n), true);
+    if (!isM("amount") && amount > 0) setField("amount", fmtIn(amount), true);
+    if (!isM("total") && total > 0) setField("total", fmtIn(total), true);
+  }
+
   function updateHint(){
     const h = $("f_hint"), f = F("first").value, l = F("last").value, a = parseNum(F("amount").value), t = parseNum(F("total").value);
     h.className = "hint";
-    if (!f || !l){ h.textContent = "Συμπλήρωσε ημερομηνίες και ποσά για να δεις τον αριθμό δόσεων."; return; }
+    const typedN = isM("n") ? parseInt(F("n").value, 10) : NaN;
+    if (!f || !l){
+      h.textContent = (a > 0 || t > 0 || typedN > 0) ? "Συμπλήρωσε την πρώτη ή την τελευταία δόση για να υπολογιστούν οι ημερομηνίες." : "Συμπλήρωσε τα στοιχεία που γνωρίζεις.";
+      return;
+    }
     const n = idxOf(l) - idxOf(f) + 1;
     if (n < 1){ h.className = "hint warn"; h.textContent = "Η τελευταία δόση πρέπει να είναι μετά την πρώτη."; return; }
-    let msg = `${n} μηνιαίες δόσεις.`;
-    const ch = readChanges().filter(c => c.from && c.amount > 0).map(c => ({from: c.from, amount: c.amount}));
+    let msg = `${n} μηνιαίες δόσεις, ${fmtDate(f)} – ${fmtDate(l)}.`;
+    const ch = validChanges();
+    let fix = "";
     if (a > 0 && t > 0){
       const sched = ch.length ? schedSum({first: f, last: l, amount: a, changes: ch}, idxOf(f), idxOf(l)) : r2(n*a), diff = r2(t - sched);
       msg += ch.length ? ` Σύνολο προγράμματος με τις αλλαγές: ${eur.format(sched)}.` : ` ${n} × ${eur.format(a)} = ${eur.format(sched)}.`;
-      if (Math.abs(diff) >= 1){ h.className = "hint warn"; msg += ` Διαφέρει ${eur.format(Math.abs(diff))} από τη συνολική οφειλή — έλεγξε τα ποσά στη ρύθμιση.`; }
+      if (Math.abs(diff) >= 1){
+        h.className = "hint warn";
+        msg += ` Διαφέρει ${eur.format(Math.abs(diff))} από τη συνολική οφειλή.`;
+        if (isM("amount") && isM("total")) fix = `<div class="fix"><button type="button" data-fix="total">Κράτα τη δόση, υπολόγισε το σύνολο</button>${ch.length ? "" : `<button type="button" data-fix="amount">Κράτα το σύνολο, υπολόγισε τη δόση</button>`}</div>`;
+      }
     }
     h.textContent = msg;
+    if (fix){
+      h.insertAdjacentHTML("beforeend", fix);
+      h.querySelectorAll("[data-fix]").forEach(b => b.onclick = () => { manual = manual.filter(k => k !== b.dataset.fix); recalc(); });
+    }
   }
-  ["first","last","amount","total"].forEach(k => F(k).addEventListener("input", updateHint));
+  function recalc(){ solve(); updateHint(); }
+  for (const k of CALC){
+    const onEdit = () => { manual = manual.filter(x => x !== k); if (F(k).value.trim()) manual.push(k); recalc(); };
+    F(k).addEventListener("input", onEdit);
+    if (F(k).type === "date") F(k).addEventListener("change", onEdit);
+  }
   $("cancel").onclick = () => dlg.close();
   $("addBtn").onclick = () => openForm(null);
   $("form").addEventListener("submit", e => {
@@ -531,10 +641,10 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
     const amount = parseNum(F("amount").value), total = parseNum(F("total").value);
     const err = m => { $("f_err").textContent = m; };
     if (!creditor) return err("Συμπλήρωσε τον φορέα.");
-    if (!first || !last) return err("Συμπλήρωσε την πρώτη και την τελευταία δόση.");
+    if (!first || !last) return err("Χρειάζεται η πρώτη ή η τελευταία δόση, μαζί με τον αριθμό δόσεων ή την άλλη ημερομηνία.");
     if (idxOf(last) < idxOf(first)) return err("Η τελευταία δόση πρέπει να είναι μετά την πρώτη.");
-    if (!(amount > 0)) return err("Το ποσό της δόσης πρέπει να είναι μεγαλύτερο από 0.");
-    if (!(total > 0)) return err("Η συνολική οφειλή πρέπει να είναι μεγαλύτερη από 0.");
+    if (!(amount > 0)) return err("Συμπλήρωσε το ποσό της δόσης ή τη συνολική οφειλή μαζί με τον αριθμό δόσεων.");
+    if (!(total > 0)) return err("Συμπλήρωσε τη συνολική οφειλή ή το ποσό δόσης μαζί με τον αριθμό δόσεων.");
     const rawCh = readChanges();
     for (const c of rawCh){
       if (!c.from) return err("Συμπλήρωσε σωστά τον μήνα σε κάθε αλλαγή ποσού (π.χ. 2027-01).");
