@@ -116,9 +116,13 @@ h1{font-size:1.35rem;font-weight:700;margin:0;letter-spacing:-.01em}
 .more{width:100%;border:none;border-top:1px solid var(--rule);background:none;padding:10px 14px;text-align:left;color:var(--accent);font-weight:600;font-size:.9rem}
 .detail{border-top:1px solid var(--rule);padding:14px}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:.9rem}
-.kv dt{color:var(--soft)} .kv dd{margin:0;text-align:right;font-weight:500;word-break:break-all}
-.code{display:flex;align-items:center;justify-content:flex-end;gap:8px}
-.copy{border:1px solid var(--rule);background:var(--paper);border-radius:8px;padding:3px 10px;font-size:.8rem}
+.kv{grid-template-columns:minmax(0,1fr) auto}
+.kv dt{color:var(--soft)} .kv dd{margin:0;text-align:right;font-weight:500;white-space:nowrap}
+.codebox{background:var(--paper);border:1px solid var(--rule);border-radius:12px;padding:10px 12px;margin-bottom:14px}
+.codebox .lbl{font-size:.8rem;color:var(--soft);margin-bottom:4px}
+.codeline{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.codetxt{font-weight:600;font-size:1rem;letter-spacing:.03em;overflow-wrap:anywhere;min-width:0}
+.copy{flex:none;white-space:nowrap;border:1px solid var(--accent);background:var(--card);color:var(--accent);border-radius:999px;padding:7px 14px;font-size:.85rem;font-weight:600;min-height:38px}
 .sched-h{font-size:.88rem;color:var(--soft);margin:16px 0 8px}
 .sched{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px}
 .chip{border:1.5px solid var(--rule);background:var(--paper);border-radius:9px;padding:6px 2px;font-size:.78rem;text-align:center;line-height:1.2}
@@ -452,8 +456,8 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
         const det = document.createElement("div");
         det.className = "detail";
         det.innerHTML = `
+          <div class="codebox"><div class="lbl">Κωδικός πληρωμής</div><div class="codeline"><span class="codetxt"></span><button class="copy">Αντιγραφή</button></div></div>
           <dl class="kv">
-            <dt>Κωδικός πληρωμής</dt><dd><span class="code"><span class="codetxt"></span><button class="copy">Αντιγραφή</button></span></dd>
             <dt>Πρώτη δόση</dt><dd>${fmtDate(d.first)}</dd>
             <dt>Τελευταία δόση</dt><dd>${fmtDate(d.last)}</dd>
             <dt>Αριθμός δόσεων</dt><dd>${n}</dd>
@@ -469,7 +473,7 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
             <button class="btn small" data-a="edit">Επεξεργασία</button>
             <button class="btn small danger" data-a="del">Διαγραφή</button>
           </div>`;
-        const ct = det.querySelector(".codetxt"); ct.textContent = d.code || "—";
+        const ct = det.querySelector(".codetxt"); ct.textContent = d.code ? d.code.replace(/\s+/g, "").replace(/(.{4})(?=.)/g, "$1 ") : "—";
         const cb = det.querySelector(".copy");
         if (!d.code) cb.remove(); else cb.onclick = () => copy(d.code, cb);
         const grid = det.querySelector(".sched");
