@@ -283,7 +283,7 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
   const mLabel = i => `${MONTHS[i%12]} ${Math.floor(i/12)}`;
   const mGen = i => `${MONTHS_GEN[i%12]} ${Math.floor(i/12)}`;
   const fmtDate = s => { const [y,m,d] = s.split("-"); return `${d}/${m}/${y}`; };
-  const parseNum = s => { if (typeof s === "number") return s; s = String(s).trim().replace(/\s/g,"").replace(/€/g,""); if (s.includes(",")) s = s.replace(/\./g,"").replace(",","."); const n = parseFloat(s); return isFinite(n) ? Math.round(n*100)/100 : NaN; };
+  const parseNum = s => { if (typeof s === "number") return s; s = String(s).trim().replace(/\s/g,"").replace(/€/g,""); if (s.includes(",")) s = s.replace(/\./g,"").replace(",","."); else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g,""); const n = parseFloat(s); return isFinite(n) ? Math.round(n*100)/100 : NaN; };
   const r2 = n => Math.round(n*100)/100;
 
   // ---------- debt math ----------
@@ -534,10 +534,10 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
     F("code").value = d?.code || "";
     F("first").value = d?.first || "";
     F("last").value = d?.last || "";
-    F("amount").value = d ? String(d.amount).replace(".",",") : "";
-    F("total").value = d ? String(d.total).replace(".",",") : "";
+    F("amount").value = d ? fmtIn(d.amount) : "";
+    F("total").value = d ? fmtIn(d.total) : "";
     $("f_changes").innerHTML = "";
-    (d?.changes || []).forEach(c => addChangeRow(c.from, String(c.amount).replace(".",",")));
+    (d?.changes || []).forEach(c => addChangeRow(c.from, fmtIn(c.amount)));
     F("n").value = "";
     // stored values count as typed; order = which one gives way first if the dates conflict with a typed number of installments
     manual = d ? ["last", "total", "first", "amount"] : [];
@@ -555,6 +555,7 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
     row.innerHTML = `<input type="month" class="c_from" aria-label="Από μήνα" placeholder="ΕΕΕΕ-ΜΜ"><input class="c_amt" inputmode="decimal" placeholder="Νέο ποσό €" aria-label="Νέο ποσό δόσης"><button type="button" class="x" aria-label="Αφαίρεση αλλαγής">×</button>`;
     row.querySelector(".c_from").value = from;
     row.querySelector(".c_amt").value = amount;
+    row.querySelector(".c_amt").addEventListener("blur", e => { const v = parseNum(e.target.value); if (e.target.value.trim() && v > 0) e.target.value = fmtIn(v); });
     row.querySelector(".x").onclick = () => { row.remove(); recalc(); };
     row.querySelectorAll("input").forEach(x => x.addEventListener("input", recalc));
     $("f_changes").appendChild(row);
@@ -569,7 +570,7 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
   const isM = k => manual.includes(k);
   const validChanges = () => readChanges().filter(c => c.from && c.amount > 0).map(c => ({from: c.from, amount: c.amount}));
   const addMonths = (ds, delta) => { const [y,m,d] = ds.split("-").map(Number); const i = y*12 + m - 1 + delta; const ny = Math.floor(i/12), nm = i%12; return `${ny}-${pad(nm+1)}-${pad(Math.min(d, new Date(ny, nm+1, 0).getDate()))}`; };
-  const fmtIn = n => String(r2(n)).replace(".", ",");
+  const fmtIn = n => { const [i, d] = Math.abs(r2(n)).toFixed(2).split("."); return (n < 0 ? "-" : "") + i.replace(/\B(?=(\d{3})+(?!\d))/g, ".") + "," + d; };
   function setField(k, v, auto){ F(k).value = v; F(k).closest(".field").classList.toggle("auto", !!auto && v !== ""); }
 
   function solve(){
@@ -633,6 +634,8 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
     F(k).addEventListener("input", onEdit);
     if (F(k).type === "date") F(k).addEventListener("change", onEdit);
   }
+  // tidy typed amounts on leaving the field: 1941.84 / 1941,84 → 1.941,84
+  for (const k of ["amount", "total"]) F(k).addEventListener("blur", () => { const v = parseNum(F(k).value); if (F(k).value.trim() && v > 0) F(k).value = fmtIn(v); });
   $("cancel").onclick = () => dlg.close();
   $("addBtn").onclick = () => openForm(null);
   $("form").addEventListener("submit", e => {
