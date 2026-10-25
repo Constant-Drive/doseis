@@ -112,6 +112,19 @@ h1{font-size:1.35rem;font-weight:700;margin:0;letter-spacing:-.01em}
 .debt.inactive{opacity:.62}
 .drow{display:grid;grid-template-columns:1fr auto;gap:10px;padding:14px 14px 12px;align-items:start}
 .dname{font-weight:600;font-size:1.05rem;line-height:1.25}
+.group{margin-top:20px}
+.group:first-child{margin-top:12px}
+.ghead{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.gname{display:flex;align-items:center;gap:10px;font-weight:700;font-size:1.08rem;min-width:0}
+.gtitle{overflow-wrap:anywhere}
+.gbadge{flex:none;width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-weight:700;font-size:1rem;background:hsl(var(--h) 55% 91%);color:hsl(var(--h) 50% 30%)}
+.gsum{font-weight:700;white-space:nowrap}
+.gsum small{font-weight:400;color:var(--soft);font-size:.78rem;margin-left:2px}
+.gsub{font-size:.82rem;color:var(--soft);margin:2px 0 0 44px}
+.group .debt{margin-left:0;border-left:4px solid hsl(var(--h) 45% 70%)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .gbadge{background:hsl(var(--h) 30% 22%);color:hsl(var(--h) 65% 78%)} :root:not([data-theme="light"]) .group .debt{border-left-color:hsl(var(--h) 35% 40%)}}
+:root[data-theme="dark"] .gbadge{background:hsl(var(--h) 30% 22%);color:hsl(var(--h) 65% 78%)}
+:root[data-theme="dark"] .group .debt{border-left-color:hsl(var(--h) 35% 40%)}
 .dcontract{font-size:.84rem;color:var(--ink);margin-top:1px}
 .kv dd.ctr{white-space:normal;overflow-wrap:anywhere}
 .dmeta{font-size:.84rem;color:var(--soft);margin-top:2px}
@@ -246,6 +259,7 @@ dialog::backdrop{background:rgba(10,20,30,.45)}
     <h3 id="dlgTitle">Νέα οφειλή</h3>
     <div class="field"><label for="f_creditor">Φορέας</label><input id="f_creditor" list="creditors" required placeholder="π.χ. ΑΑΔΕ, e-ΕΦΚΑ, doValue"></div>
     <div class="field"><label for="f_code">Κωδικός πληρωμής</label><input id="f_code" inputmode="text" autocomplete="off" placeholder="π.χ. RF…"></div>
+    <div class="field"><label for="f_kind">Είδος οφειλής (προαιρετικό)</label><input id="f_kind" list="kinds" autocomplete="off" placeholder="π.χ. Επιχειρηματικό δάνειο"></div>
     <div class="field"><label for="f_contract">Αριθμός σύμβασης (προαιρετικό)</label><input id="f_contract" autocomplete="off" placeholder="π.χ. για δάνεια τραπεζών"></div>
     <p class="form-help">Συμπλήρωσε ό,τι γνωρίζεις — τα υπόλοιπα υπολογίζονται αυτόματα (π.χ. πρώτη δόση + αριθμός δόσεων + ποσό δόσης).</p>
     <div class="row2">
@@ -272,6 +286,10 @@ dialog::backdrop{background:rgba(10,20,30,.45)}
   </form>
 </dialog>
 
+<datalist id="kinds">
+  <option value="Επιχειρηματικό δάνειο"><option value="Καταναλωτικό δάνειο"><option value="Στεγαστικό δάνειο"><option value="Πιστωτική κάρτα">
+  <option value="Ανοιχτός λογαριασμός"><option value="Φόροι"><option value="Ασφαλιστικές εισφορές"><option value="Δημοτικά τέλη">
+</datalist>
 <datalist id="creditors">
   <option value="ΑΑΔΕ"><option value="e-ΕΦΚΑ"><option value="ΔΥΠΑ"><option value="Δήμος">
   <option value="doValue"><option value="Cepal"><option value="Intrum"><option value="Qquant"><option value="Pillarstone">
@@ -482,8 +500,23 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
       $("emptyAdd").onclick = () => openForm(null);
       return;
     }
-    const sorted = [...state.debts].sort((x,y) => (activeIn(y,si) - activeIn(x,si)) || x.creditor.localeCompare(y.creditor,"el") || (x.contract || "").localeCompare(y.contract || "", "el"));
-    for (const d of sorted){
+    const groups = new Map();
+    for (const d of state.debts){ const k = d.creditor.trim().toLocaleLowerCase("el"); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(d); }
+    const gList = [...groups.values()].sort((a,b) => a[0].creditor.localeCompare(b[0].creditor, "el"));
+    for (const g of gList){
+    g.sort((x,y) => (activeIn(y,si) - activeIn(x,si)) || (x.kind || "").localeCompare(y.kind || "", "el") || (x.contract || "").localeCompare(y.contract || "", "el"));
+    const name = g[0].creditor.trim();
+    let hue = 0; for (const ch of name.toLocaleLowerCase("el")) hue = (hue * 31 + ch.codePointAt(0)) % 360;
+    const gm = r2(g.filter(d => activeIn(d,si)).reduce((s,d) => s + amtAt(d,si), 0));
+    const gr = r2(g.reduce((s,d) => s + remNow(d), 0));
+    const sec = document.createElement("section");
+    sec.className = "group";
+    sec.style.setProperty("--h", hue);
+    sec.innerHTML = `<div class="ghead"><div class="gname"><span class="gbadge"></span><span class="gtitle"></span></div><div class="gsum">${eur.format(gm)}<small>/μήνα</small></div></div><div class="gsub">${g.length} ${g.length === 1 ? "οφειλή" : "οφειλές"} · υπόλοιπο ${eur.format(gr)}</div>`;
+    sec.querySelector(".gbadge").textContent = (name[0] || "?").toLocaleUpperCase("el");
+    sec.querySelector(".gtitle").textContent = name;
+    wrap.appendChild(sec);
+    for (const d of g){
       const act = activeIn(d,si), paidSel = isPaid(d,si), n = nInst(d), pc = paidCount(d), od = overdue(d,cur);
       const pct = d.total > 0 ? Math.min(100, paidAmt(d) / d.total * 100) : 0;
       const el = document.createElement("article");
@@ -504,7 +537,7 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
           <button class="paybtn" aria-pressed="${paidSel}" ${act ? "" : "disabled"}><span class="box">${paidSel ? "✓" : ""}</span>${act ? (paidSel ? `Πληρώθηκε ${MONTHS[si%12]}` : `Πλήρωσα ${MONTHS[si%12]}`) : "Εκτός ρύθμισης"}</button>
         </div>
         <button class="more" aria-expanded="${open.has(d.id)}">${open.has(d.id) ? "▴ Κλείσιμο λεπτομερειών" : "▾ Λεπτομέρειες και πρόγραμμα"}</button>`;
-      el.querySelector(".dname").textContent = d.creditor;
+      el.querySelector(".dname").textContent = d.kind || d.creditor;
       const dc = el.querySelector(".dcontract"); if (d.contract) dc.textContent = "Σύμβαση " + d.contract; else dc.remove();
       el.querySelector(".paybtn").onclick = () => { if (act) togglePaid(d, si); };
       el.querySelector(".more").onclick = () => { open.has(d.id) ? open.delete(d.id) : open.add(d.id); render(false); };
@@ -515,7 +548,8 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
         det.innerHTML = `
           <div class="codebox"><div class="lbl">Κωδικός πληρωμής</div><div class="codeline"><span class="codetxt"></span><button class="copy">Αντιγραφή</button></div></div>
           <dl class="kv">
-            ${d.contract ? `<dt>Αριθμός σύμβασης</dt><dd class="ctr"></dd>` : ""}
+            ${d.kind ? `<dt>Είδος</dt><dd class="ctr kindv"></dd>` : ""}
+            ${d.contract ? `<dt>Αριθμός σύμβασης</dt><dd class="ctr ctrv"></dd>` : ""}
             <dt>Πρώτη δόση</dt><dd>${fmtDate(d.first)}</dd>
             <dt>Τελευταία δόση</dt><dd>${fmtDate(d.last)}</dd>
             <dt>Αριθμός δόσεων</dt><dd>${n}</dd>
@@ -531,7 +565,8 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
             <button class="btn small" data-a="edit">Επεξεργασία</button>
             <button class="btn small danger" data-a="del">Διαγραφή</button>
           </div>`;
-        if (d.contract) det.querySelector(".ctr").textContent = d.contract;
+        if (d.contract) det.querySelector(".ctrv").textContent = d.contract;
+        if (d.kind) det.querySelector(".kindv").textContent = d.kind;
         const ct = det.querySelector(".codetxt"); ct.textContent = d.code ? d.code.replace(/\s+/g, "").replace(/(.{4})(?=.)/g, "$1 ") : "—";
         const cb = det.querySelector(".copy");
         if (!d.code) cb.remove(); else cb.onclick = () => copy(d.code, cb);
@@ -562,11 +597,12 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
         det.appendChild(cl);
         el.appendChild(det);
       }
-      wrap.appendChild(el);
+      sec.appendChild(el);
+    }
     }
   }
 
-  const dLabel = d => d.contract ? `${d.creditor} …${d.contract.slice(-4)}` : d.creditor;
+  const dLabel = d => d.creditor + (d.kind ? ` · ${d.kind}` : "") + (d.contract ? ` …${d.contract.slice(-4)}` : "");
   const byId = id => state.debts.find(x => x.id === id);
   function togglePaid(dd, i){
     const d = byId(dd.id); if (!d) return;
@@ -597,6 +633,7 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
     F("creditor").value = d?.creditor || "";
     F("code").value = d?.code || "";
     F("contract").value = d?.contract || "";
+    F("kind").value = d?.kind || "";
     F("first").value = d?.first || "";
     F("last").value = d?.last || "";
     F("amount").value = d ? fmtIn(d.amount) : "";
@@ -705,7 +742,7 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
   $("addBtn").onclick = () => openForm(null);
   $("form").addEventListener("submit", e => {
     e.preventDefault();
-    const creditor = F("creditor").value.trim(), code = F("code").value.trim(), contract = F("contract").value.trim(), first = F("first").value, last = F("last").value;
+    const creditor = F("creditor").value.trim(), code = F("code").value.trim(), contract = F("contract").value.trim(), kind = F("kind").value.trim(), first = F("first").value, last = F("last").value;
     const amount = parseNum(F("amount").value), total = parseNum(F("total").value);
     const err = m => { $("f_err").textContent = m; };
     if (!creditor) return err("Συμπλήρωσε τον φορέα.");
@@ -723,10 +760,10 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
     const changes = [...chMap].map(([from, amount]) => ({from, amount}));
     const target = editing ? byId(editing.id) : null;
     if (target){
-      Object.assign(target, {creditor, code, contract, first, last, amount, total, changes});
+      Object.assign(target, {creditor, code, contract, kind, first, last, amount, total, changes});
       target.paid = target.paid.filter(k => activeIn(target, idxOf(k)));
     } else {
-      state.debts.push({ id: "d" + Date.now().toString(36) + Math.random().toString(36).slice(2,6), creditor, code, contract, first, last, amount, total, paid: [], changes });
+      state.debts.push({ id: "d" + Date.now().toString(36) + Math.random().toString(36).slice(2,6), creditor, code, contract, kind, first, last, amount, total, paid: [], changes });
     }
     dlg.close();
     commit(true);
@@ -746,7 +783,7 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
     const out = { debts: [] };
     if (s && Array.isArray(s.debts)) for (const d of s.debts){
       if (!d || !d.first || !d.last) continue;
-      out.debts.push({ id: String(d.id || Math.random()), creditor: String(d.creditor || ""), code: String(d.code || ""), contract: String(d.contract || ""), first: String(d.first), last: String(d.last), amount: Number(d.amount) || 0, total: Number(d.total) || 0, paid: Array.isArray(d.paid) ? d.paid.map(String) : [], changes: Array.isArray(d.changes) ? d.changes.filter(c => c && c.from).map(c => ({from: String(c.from), amount: Number(c.amount) || 0})) : [] });
+      out.debts.push({ id: String(d.id || Math.random()), creditor: String(d.creditor || ""), code: String(d.code || ""), contract: String(d.contract || ""), kind: String(d.kind || ""), first: String(d.first), last: String(d.last), amount: Number(d.amount) || 0, total: Number(d.total) || 0, paid: Array.isArray(d.paid) ? d.paid.map(String) : [], changes: Array.isArray(d.changes) ? d.changes.filter(c => c && c.from).map(c => ({from: String(c.from), amount: Number(c.amount) || 0})) : [] });
     }
     return out;
   }
