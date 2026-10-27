@@ -190,6 +190,8 @@ dialog::backdrop{background:rgba(10,20,30,.45)}
 .dlg-actions{display:flex;justify-content:flex-end;gap:8px}
 .field.auto input{background:var(--accent-bg);border-color:transparent;color:var(--accent);font-weight:600}
 .field.auto label::after{content:" · αυτόματο";color:var(--accent);font-weight:600}
+.check{display:flex;gap:10px;align-items:center;font-size:.9rem;margin:-2px 0 14px;cursor:pointer}
+.check input{width:20px;height:20px;accent-color:var(--accent);flex:none}
 .form-help{font-size:.85rem;color:var(--soft);margin:-6px 0 14px}
 .hint .fix{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .hint .fix button{border:1px solid currentColor;background:var(--card);color:inherit;border-radius:999px;padding:5px 11px;font-size:.8rem;font-weight:600}
@@ -272,6 +274,7 @@ dialog::backdrop{background:rgba(10,20,30,.45)}
       <div class="field"><label for="f_first">Πρώτη δόση</label><input type="date" id="f_first"></div>
       <div class="field"><label for="f_last">Τελευταία δόση</label><input type="date" id="f_last"></div>
     </div>
+    <label class="check"><input type="checkbox" id="f_eom"> Η δόση λήγει στο τέλος κάθε μήνα</label>
     <div class="row2">
       <div class="field"><label for="f_n">Αριθμός δόσεων</label><input id="f_n" inputmode="numeric" placeholder="π.χ. 120"></div>
       <div class="field"><label for="f_amount">Ποσό δόσης (€)</label><input id="f_amount" inputmode="decimal" placeholder="0,00"></div>
@@ -378,7 +381,7 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
     const today = new Date(); today.setHours(0,0,0,0);
     let nextT = null, items = [];
     for (const d of debts){
-      const day = Number(d.first.split("-")[2]);
+      const day = d.eom ? 31 : Number(d.first.split("-")[2]);
       for (let i = Math.max(cur, fIdx(d)); i <= lIdx(d); i++){
         if (isPaid(d,i)) continue;
         const y = Math.floor(i/12), m = i%12;
@@ -533,7 +536,7 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
         <div class="drow">
           <div>
             <div class="dname"></div><div class="dcontract"></div><div class="dnote"></div>
-            <div class="dmeta">${act ? `Δόση ${si - fIdx(d) + 1} από ${n} · λήξη κάθε ${Number(dueDay)} του μήνα` : (si < fIdx(d) ? `Ξεκινά ${mGen(fIdx(d))}` : `Ολοκληρώθηκε ${mGen(lIdx(d))}`)}</div>
+            <div class="dmeta">${act ? `Δόση ${si - fIdx(d) + 1} από ${n} · ${d.eom || Number(dueDay) === 31 ? "λήξη στο τέλος κάθε μήνα" : `λήξη κάθε ${Number(dueDay)} του μήνα`}` : (si < fIdx(d) ? `Ξεκινά ${mGen(fIdx(d))}` : `Ολοκληρώθηκε ${mGen(lIdx(d))}`)}</div>
           </div>
           <div class="damt"><b>${eur.format(amtAt(d, Math.min(Math.max(si, fIdx(d)), lIdx(d))))}</b><small>${hasChanges(d) ? "μεταβλητή δόση" : "τον μήνα"}</small></div>
         </div>
@@ -644,6 +647,7 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
     F("contract").value = d?.contract || "";
     F("kind").value = d?.kind || "";
     F("notes").value = d?.notes || "";
+    F("eom").checked = !!d?.eom;
     F("first").value = d?.first || "";
     F("last").value = d?.last || "";
     F("amount").value = d ? fmtIn(d.amount) : "";
@@ -683,6 +687,7 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
   const validChanges = () => readChanges().filter(c => c.from && c.amount > 0).map(c => ({from: c.from, amount: c.amount}));
   const addMonths = (ds, delta) => { const [y,m,d] = ds.split("-").map(Number); const i = y*12 + m - 1 + delta; const ny = Math.floor(i/12), nm = i%12; return `${ny}-${pad(nm+1)}-${pad(Math.min(d, new Date(ny, nm+1, 0).getDate()))}`; };
   const fmtIn = n => { const [i, d] = Math.abs(r2(n)).toFixed(2).split("."); return (n < 0 ? "-" : "") + i.replace(/\B(?=(\d{3})+(?!\d))/g, ".") + "," + d; };
+  const toEom = ds => { const [y,m] = ds.split("-").map(Number); return `${y}-${pad(m)}-${pad(new Date(y, m, 0).getDate())}`; };
   function setField(k, v, auto){ F(k).value = v; F(k).closest(".field").classList.toggle("auto", !!auto && v !== ""); }
 
   function solve(){
@@ -705,8 +710,8 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
       if (n > 0 && amount > 0 && !(total > 0)) total = (ch.length && first) ? schedSum({first, last: addMonths(first, n - 1), amount, changes: ch}, idxOf(first), idxOf(first) + n - 1) : r2(n * amount);
       if (n > 0 && total > 0 && !(amount > 0) && !ch.length) amount = r2(total / n);
     }
-    if (!isM("first") && first) setField("first", first, true);
-    if (!isM("last") && last) setField("last", last, true);
+    if (!isM("first") && first) setField("first", F("eom").checked ? toEom(first) : first, true);
+    if (!isM("last") && last) setField("last", F("eom").checked ? toEom(last) : last, true);
     if (!isM("n") && n > 0) setField("n", String(n), true);
     if (!isM("amount") && amount > 0) setField("amount", fmtIn(amount), true);
     if (!isM("total") && total > 0) setField("total", fmtIn(total), true);
@@ -746,13 +751,16 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
     F(k).addEventListener("input", onEdit);
     if (F(k).type === "date") F(k).addEventListener("change", onEdit);
   }
+  // a first installment on the last day of its month → suggest "end of every month"
+  F("first").addEventListener("change", () => { const v = F("first").value; if (!v) return; const [y,m,dd] = v.split("-").map(Number); F("eom").checked = dd === new Date(y, m, 0).getDate(); recalc(); });
+  F("eom").addEventListener("change", recalc);
   // tidy typed amounts on leaving the field: 1941.84 / 1941,84 → 1.941,84
   for (const k of ["amount", "total"]) F(k).addEventListener("blur", () => { const v = parseNum(F(k).value); if (F(k).value.trim() && v > 0) F(k).value = fmtIn(v); });
   $("cancel").onclick = () => dlg.close();
   $("addBtn").onclick = () => openForm(null);
   $("form").addEventListener("submit", e => {
     e.preventDefault();
-    const creditor = F("creditor").value.trim(), code = F("code").value.trim(), contract = F("contract").value.trim(), kind = F("kind").value.trim(), notes = F("notes").value.trim(), first = F("first").value, last = F("last").value;
+    const creditor = F("creditor").value.trim(), code = F("code").value.trim(), contract = F("contract").value.trim(), kind = F("kind").value.trim(), notes = F("notes").value.trim(), eom = F("eom").checked, first = F("first").value, last = F("last").value;
     const amount = parseNum(F("amount").value), total = parseNum(F("total").value);
     const err = m => { $("f_err").textContent = m; };
     if (!creditor) return err("Συμπλήρωσε τον φορέα.");
@@ -770,10 +778,10 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
     const changes = [...chMap].map(([from, amount]) => ({from, amount}));
     const target = editing ? byId(editing.id) : null;
     if (target){
-      Object.assign(target, {creditor, code, contract, kind, notes, first, last, amount, total, changes});
+      Object.assign(target, {creditor, code, contract, kind, notes, eom, first, last, amount, total, changes});
       target.paid = target.paid.filter(k => activeIn(target, idxOf(k)));
     } else {
-      state.debts.push({ id: "d" + Date.now().toString(36) + Math.random().toString(36).slice(2,6), creditor, code, contract, kind, notes, first, last, amount, total, paid: [], changes });
+      state.debts.push({ id: "d" + Date.now().toString(36) + Math.random().toString(36).slice(2,6), creditor, code, contract, kind, notes, eom, first, last, amount, total, paid: [], changes });
     }
     dlg.close();
     commit(true);
@@ -793,7 +801,7 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
     const out = { debts: [] };
     if (s && Array.isArray(s.debts)) for (const d of s.debts){
       if (!d || !d.first || !d.last) continue;
-      out.debts.push({ id: String(d.id || Math.random()), creditor: String(d.creditor || ""), code: String(d.code || ""), contract: String(d.contract || ""), kind: String(d.kind || ""), notes: String(d.notes || ""), first: String(d.first), last: String(d.last), amount: Number(d.amount) || 0, total: Number(d.total) || 0, paid: Array.isArray(d.paid) ? d.paid.map(String) : [], changes: Array.isArray(d.changes) ? d.changes.filter(c => c && c.from).map(c => ({from: String(c.from), amount: Number(c.amount) || 0})) : [] });
+      out.debts.push({ id: String(d.id || Math.random()), creditor: String(d.creditor || ""), code: String(d.code || ""), contract: String(d.contract || ""), kind: String(d.kind || ""), notes: String(d.notes || ""), eom: !!d.eom, first: String(d.first), last: String(d.last), amount: Number(d.amount) || 0, total: Number(d.total) || 0, paid: Array.isArray(d.paid) ? d.paid.map(String) : [], changes: Array.isArray(d.changes) ? d.changes.filter(c => c && c.from).map(c => ({from: String(c.from), amount: Number(c.amount) || 0})) : [] });
     }
     return out;
   }
