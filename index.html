@@ -161,11 +161,12 @@ h1{font-size:1.35rem;font-weight:700;margin:0;letter-spacing:-.01em}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:.9rem}
 .kv{grid-template-columns:minmax(0,1fr) auto}
 .kv dt{color:var(--soft)} .kv dd{margin:0;text-align:right;font-weight:500;white-space:nowrap}
-.codebox{background:var(--paper);border:1px solid var(--rule);border-radius:12px;padding:10px 12px;margin-bottom:14px}
-.codebox .lbl{font-size:.8rem;color:var(--soft);margin-bottom:4px}
-.codeline{display:flex;align-items:center;justify-content:space-between;gap:10px}
-.codetxt{font-weight:600;font-size:1rem;letter-spacing:.03em;overflow-wrap:anywhere;min-width:0}
-.copy{flex:none;white-space:nowrap;border:1px solid var(--accent);background:var(--card);color:var(--accent);border-radius:999px;padding:7px 14px;font-size:.85rem;font-weight:600;min-height:38px}
+.codebox{background:var(--paper);border:1px solid var(--rule);border-radius:12px;padding:10px 12px;margin-bottom:10px}
+.codehead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px}
+.codebox .lbl{font-size:.8rem;color:var(--soft)}
+.codetxt{font-weight:600;font-size:1.02rem;letter-spacing:.03em;overflow-wrap:anywhere;line-height:1.35}
+.copy{flex:none;white-space:nowrap;border:1px solid var(--accent);background:var(--card);color:var(--accent);border-radius:999px;padding:5px 12px;font-size:.82rem;font-weight:600;min-height:34px}
+.kv{margin-top:14px}
 .sched-h{font-size:.88rem;color:var(--soft);margin:16px 0 8px}
 .sched{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px}
 .chip{border:1.5px solid var(--rule);background:var(--paper);border-radius:9px;padding:6px 2px;font-size:.78rem;text-align:center;line-height:1.2}
@@ -622,10 +623,10 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
         const det = document.createElement("div");
         det.className = "detail";
         det.innerHTML = `
-          <div class="codebox"><div class="lbl">Κωδικός πληρωμής</div><div class="codeline"><span class="codetxt"></span><button class="copy">Αντιγραφή</button></div></div>
+          <div class="codebox"><div class="codehead"><span class="lbl">Κωδικός πληρωμής</span><button class="copy">Αντιγραφή</button></div><div class="codetxt"></div></div>
+          ${d.contract ? `<div class="codebox"><div class="codehead"><span class="lbl">Αριθμός σύμβασης</span><button class="copy copy-ctr">Αντιγραφή</button></div><div class="codetxt ctrtxt"></div></div>` : ""}
           <dl class="kv">
             ${d.kind ? `<dt>Είδος</dt><dd class="ctr kindv"></dd>` : ""}
-            ${d.contract ? `<dt>Αριθμός σύμβασης</dt><dd class="ctr ctrv"></dd>` : ""}
             <dt>Πρώτη δόση</dt><dd>${fmtDate(d.first)}</dd>
             <dt>Τελευταία δόση</dt><dd>${fmtDate(d.last)}</dd>
             <dt>Αριθμός δόσεων</dt><dd>${n}</dd>
@@ -642,7 +643,7 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
             <button class="btn small" data-a="edit">Επεξεργασία</button>
             <button class="btn small danger" data-a="del">Διαγραφή</button>
           </div>`;
-        if (d.contract) det.querySelector(".ctrv").textContent = d.contract;
+        if (d.contract){ det.querySelector(".ctrtxt").textContent = d.contract; const cc = det.querySelector(".copy-ctr"); cc.onclick = () => copy(d.contract, cc); }
         if (d.kind) det.querySelector(".kindv").textContent = d.kind;
         if (d.notes){ const nb = det.querySelector(".notes"); nb.hidden = false; nb.querySelector(".ntext").textContent = d.notes; }
         const ct = det.querySelector(".codetxt"); ct.textContent = d.code ? d.code.replace(/\s+/g, "").replace(/(.{4})(?=.)/g, "$1 ") : "—";
