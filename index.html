@@ -546,10 +546,12 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
     }
     $("tools").hidden = false;
     const dueDayIn = (d,i) => { const md = new Date(Math.floor(i/12), i%12 + 1, 0).getDate(); return d.eom ? md : Math.min(Number(d.first.split("-")[2]), md); };
+    // full due date of the debt's installment in the selected month, or of its first installment if it starts later
+    const dueTs = d => { const i = Math.max(si, fIdx(d)); return new Date(Math.floor(i/12), i%12, dueDayIn(d,i)).getTime(); };
     const keyFns = {
-      "due-asc": d => dueDayIn(d,si),
-      "due-desc": d => -dueDayIn(d,si),
-      "unpaid": d => (isPaid(d,si) ? 100 : 0) + dueDayIn(d,si),
+      "due-asc": d => dueTs(d),
+      "due-desc": d => -dueTs(d),
+      "unpaid": d => (isPaid(d, Math.max(si, fIdx(d))) ? 1e13 : 0) + dueTs(d),
       "new": d => -idxOf(d.first) * 40 - Number(d.first.split("-")[2]),
       "old": d => idxOf(d.first) * 40 + Number(d.first.split("-")[2]),
       "ending": d => idxOf(d.last),
@@ -559,7 +561,9 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
     };
     const keyFn = keyFns[sortMode] || keyFns["due-asc"];
     // debts with no installment in the selected month always go last
-    const sortKey = d => activeIn(d,si) ? keyFn(d) : 1e9 + (si < fIdx(d) ? fIdx(d) - si : 900);
+    const dateMode = ["due-asc", "due-desc", "unpaid"].includes(sortMode);
+    // finished debts always go last; in date modes debts that start later are placed by their real first date
+    const sortKey = d => (activeIn(d,si) || (dateMode && si < fIdx(d))) ? keyFn(d) : 1e15 + (si < fIdx(d) ? fIdx(d) - si : 900);
     const txt = (x,y) => x.creditor.localeCompare(y.creditor, "el") || (x.kind || "").localeCompare(y.kind || "", "el") || (x.contract || "").localeCompare(y.contract || "", "el");
     const cmp = (x,y) => sortKey(x) - sortKey(y) || txt(x,y);
     let gList;
@@ -597,7 +601,7 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
         <div class="drow">
           <div>
             <div class="dname"></div><div class="dcontract"></div><div class="dnote"></div>
-            <div class="dmeta">${act ? `Δόση ${si - fIdx(d) + 1} από ${n} · λήξη ${dueDayIn(d,si)} ${MONTHS[si%12]}${d.eom || Number(dueDay) === 31 ? " (τέλος μήνα)" : ""}` : (si < fIdx(d) ? `Ξεκινά ${mGen(fIdx(d))}` : `Ολοκληρώθηκε ${mGen(lIdx(d))}`)}</div>
+            <div class="dmeta">${act ? `Δόση ${si - fIdx(d) + 1} από ${n} · λήξη ${dueDayIn(d,si)} ${MONTHS[si%12]}${d.eom || Number(dueDay) === 31 ? " (τέλος μήνα)" : ""}` : (si < fIdx(d) ? `Ξεκινά ${dueDayIn(d, fIdx(d))} ${MONTHS[fIdx(d)%12]} ${Math.floor(fIdx(d)/12)} · ${n} δόσεις` : `Ολοκληρώθηκε ${mGen(lIdx(d))}`)}</div>
           </div>
           <div class="damt"><b>${eur.format(amtAt(d, Math.min(Math.max(si, fIdx(d)), lIdx(d))))}</b><small>${hasChanges(d) ? "μεταβλητή δόση" : "τον μήνα"}</small></div>
         </div>
