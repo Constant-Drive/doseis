@@ -108,6 +108,14 @@ h1{font-size:1.35rem;font-weight:700;margin:0;letter-spacing:-.01em}
 /* Debt list */
 .list{margin-top:24px}
 .list-head{display:flex;justify-content:space-between;align-items:baseline}
+.tools{display:flex;gap:8px;align-items:center;margin-top:8px}
+.tools[hidden]{display:none}
+.sortsel{flex:1;min-width:0;display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--rule);border-radius:10px;padding:0 10px;min-height:42px}
+.sortsel span{font-size:.8rem;color:var(--soft);flex:none}
+.sortsel select{flex:1;min-width:0;border:none;background:transparent;font-weight:600;font-size:.9rem;padding:9px 0}
+.grp{flex:none;border:1px solid var(--rule);background:var(--card);border-radius:10px;min-height:42px;padding:0 12px;font-weight:600;font-size:.85rem;color:var(--soft)}
+.grp[aria-pressed="true"]{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.group.flat{margin-top:0}
 .list-head span{font-size:.85rem;color:var(--soft)}
 .debt{background:var(--card);border:1px solid var(--rule);border-radius:16px;margin-top:10px;overflow:hidden}
 .debt.inactive{opacity:.62}
@@ -255,6 +263,22 @@ dialog::backdrop{background:rgba(10,20,30,.45)}
 
   <section class="list">
     <div class="list-head"><h2>Οφειλές ρύθμισης</h2><span id="count"></span></div>
+    <div class="tools" id="tools" hidden>
+      <label class="sortsel"><span>Ταξινόμηση</span>
+        <select id="sortSel">
+          <option value="due-asc">Ημερομηνία πληρωμής · νωρίτερη πρώτα</option>
+          <option value="due-desc">Ημερομηνία πληρωμής · αργότερη πρώτα</option>
+          <option value="unpaid">Απλήρωτες του μήνα πρώτα</option>
+          <option value="new">Νεότερη ρύθμιση πρώτα</option>
+          <option value="old">Παλαιότερη ρύθμιση πρώτα</option>
+          <option value="ending">Τελειώνει νωρίτερα</option>
+          <option value="alpha">Αλφαβητικά (Α–Ω)</option>
+          <option value="amount">Μεγαλύτερη δόση πρώτα</option>
+          <option value="remaining">Μεγαλύτερο υπόλοιπο πρώτα</option>
+        </select>
+      </label>
+      <button class="grp" id="grpBtn" aria-pressed="true">Ανά φορέα</button>
+    </div>
     <div id="debts"></div>
   </section>
 </div>
@@ -404,6 +428,16 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
     box.querySelector(".who").textContent = items.map(x => items.length > 1 ? `${dLabel(x.d)} ${eur.format(x.amt)}` : dLabel(x.d)).join(" · ");
   }
 
+  // ---------- list sorting (remembered on this device) ----------
+  let sortMode = "due-asc", grouped = true;
+  try { const v = JSON.parse(localStorage.getItem("doseis-sort") || "{}"); if (v.mode) sortMode = v.mode; if (typeof v.grouped === "boolean") grouped = v.grouped; } catch(e){}
+  const saveSort = () => { try { localStorage.setItem("doseis-sort", JSON.stringify({mode: sortMode, grouped})); } catch(e){} };
+  $("sortSel").value = sortMode;
+  if (!$("sortSel").value){ sortMode = "due-asc"; $("sortSel").value = sortMode; }
+  $("grpBtn").setAttribute("aria-pressed", grouped);
+  $("sortSel").onchange = () => { sortMode = $("sortSel").value; saveSort(); render(false); };
+  $("grpBtn").onclick = () => { grouped = !grouped; $("grpBtn").setAttribute("aria-pressed", grouped); saveSort(); render(false); };
+
   // ---------- render ----------
   function render(scrollStrip){
     const debts = state.debts;
@@ -505,29 +539,52 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
     const wrap = $("debts");
     wrap.innerHTML = "";
     if (!state.debts.length){
+      $("tools").hidden = true;
       wrap.innerHTML = `<div class="empty"><p>Δεν έχεις καταχωρίσει οφειλές ακόμα. Πρόσθεσε κάθε οφειλή του εξωδικαστικού με τον φορέα, τον κωδικό πληρωμής και τις ημερομηνίες των δόσεων.</p><button class="btn primary" id="emptyAdd">Πρόσθεσε οφειλή</button></div>`;
       $("emptyAdd").onclick = () => openForm(null);
       return;
     }
-    const groups = new Map();
-    for (const d of state.debts){ const k = d.creditor.trim().toLocaleLowerCase("el"); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(d); }
-    // order by due day in the selected month (debts not running that month go last), then alphabetically
+    $("tools").hidden = false;
     const dueDayIn = (d,i) => { const md = new Date(Math.floor(i/12), i%12 + 1, 0).getDate(); return d.eom ? md : Math.min(Number(d.first.split("-")[2]), md); };
-    const sortKey = d => activeIn(d,si) ? dueDayIn(d,si) : 1000 + (si < fIdx(d) ? fIdx(d) - si : 900);
-    const gKey = g => Math.min(...g.map(sortKey));
-    const gList = [...groups.values()].sort((a,b) => gKey(a) - gKey(b) || a[0].creditor.localeCompare(b[0].creditor, "el"));
+    const keyFns = {
+      "due-asc": d => dueDayIn(d,si),
+      "due-desc": d => -dueDayIn(d,si),
+      "unpaid": d => (isPaid(d,si) ? 100 : 0) + dueDayIn(d,si),
+      "new": d => -idxOf(d.first) * 40 - Number(d.first.split("-")[2]),
+      "old": d => idxOf(d.first) * 40 + Number(d.first.split("-")[2]),
+      "ending": d => idxOf(d.last),
+      "alpha": d => 0,
+      "amount": d => -amtAt(d, Math.min(Math.max(si, fIdx(d)), lIdx(d))),
+      "remaining": d => -remNow(d)
+    };
+    const keyFn = keyFns[sortMode] || keyFns["due-asc"];
+    // debts with no installment in the selected month always go last
+    const sortKey = d => activeIn(d,si) ? keyFn(d) : 1e9 + (si < fIdx(d) ? fIdx(d) - si : 900);
+    const txt = (x,y) => x.creditor.localeCompare(y.creditor, "el") || (x.kind || "").localeCompare(y.kind || "", "el") || (x.contract || "").localeCompare(y.contract || "", "el");
+    const cmp = (x,y) => sortKey(x) - sortKey(y) || txt(x,y);
+    let gList;
+    if (grouped){
+      const groups = new Map();
+      for (const d of state.debts){ const k = d.creditor.trim().toLocaleLowerCase("el"); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(d); }
+      gList = [...groups.values()];
+      gList.forEach(g => g.sort(cmp));
+      gList.sort((a,b) => cmp(a[0], b[0]));
+    } else {
+      gList = [...state.debts].sort(cmp).map(d => [d]);
+    }
     for (const g of gList){
-    g.sort((x,y) => sortKey(x) - sortKey(y) || (x.kind || "").localeCompare(y.kind || "", "el") || (x.contract || "").localeCompare(y.contract || "", "el"));
     const name = g[0].creditor.trim();
     let hue = 0; for (const ch of name.toLocaleLowerCase("el")) hue = (hue * 31 + ch.codePointAt(0)) % 360;
     const gm = r2(g.filter(d => activeIn(d,si)).reduce((s,d) => s + amtAt(d,si), 0));
     const gr = r2(g.reduce((s,d) => s + remNow(d), 0));
     const sec = document.createElement("section");
-    sec.className = "group";
+    sec.className = "group" + (grouped ? "" : " flat");
     sec.style.setProperty("--h", hue);
+    if (grouped){
     sec.innerHTML = `<div class="ghead"><div class="gname"><span class="gbadge"></span><span class="gtitle"></span></div><div class="gsum">${eur.format(gm)}<small>/μήνα</small></div></div><div class="gsub">${g.length} ${g.length === 1 ? "οφειλή" : "οφειλές"} · υπόλοιπο ${eur.format(gr)}</div>`;
     sec.querySelector(".gbadge").textContent = (name[0] || "?").toLocaleUpperCase("el");
     sec.querySelector(".gtitle").textContent = name;
+    }
     wrap.appendChild(sec);
     for (const d of g){
       const act = activeIn(d,si), paidSel = isPaid(d,si), n = nInst(d), pc = paidCount(d), od = overdue(d,cur);
@@ -550,8 +607,9 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
           <button class="paybtn" aria-pressed="${paidSel}" ${act ? "" : "disabled"}><span class="box">${paidSel ? "✓" : ""}</span>${act ? (paidSel ? `Πληρώθηκε ${MONTHS[si%12]}` : `Πλήρωσα ${MONTHS[si%12]}`) : "Εκτός ρύθμισης"}</button>
         </div>
         <button class="more" aria-expanded="${open.has(d.id)}">${open.has(d.id) ? "▴ Κλείσιμο λεπτομερειών" : "▾ Λεπτομέρειες και πρόγραμμα"}</button>`;
-      el.querySelector(".dname").textContent = d.kind || d.creditor;
-      const dc = el.querySelector(".dcontract"); if (d.contract) dc.textContent = "Σύμβαση " + d.contract; else dc.remove();
+      el.querySelector(".dname").textContent = grouped ? (d.kind || d.creditor) : d.creditor;
+      const dcParts = [grouped ? "" : d.kind, d.contract ? "Σύμβαση " + d.contract : ""].filter(Boolean);
+      const dc = el.querySelector(".dcontract"); if (dcParts.length) dc.textContent = dcParts.join(" · "); else dc.remove();
       const dn = el.querySelector(".dnote"); if (d.notes) dn.textContent = "📝 " + d.notes; else dn.remove();
       el.querySelector(".paybtn").onclick = () => { if (act) togglePaid(d, si); };
       el.querySelector(".more").onclick = () => { open.has(d.id) ? open.delete(d.id) : open.add(d.id); render(false); };
