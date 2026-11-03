@@ -511,9 +511,13 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
     }
     const groups = new Map();
     for (const d of state.debts){ const k = d.creditor.trim().toLocaleLowerCase("el"); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(d); }
-    const gList = [...groups.values()].sort((a,b) => a[0].creditor.localeCompare(b[0].creditor, "el"));
+    // order by due day in the selected month (debts not running that month go last), then alphabetically
+    const dueDayIn = (d,i) => { const md = new Date(Math.floor(i/12), i%12 + 1, 0).getDate(); return d.eom ? md : Math.min(Number(d.first.split("-")[2]), md); };
+    const sortKey = d => activeIn(d,si) ? dueDayIn(d,si) : 1000 + (si < fIdx(d) ? fIdx(d) - si : 900);
+    const gKey = g => Math.min(...g.map(sortKey));
+    const gList = [...groups.values()].sort((a,b) => gKey(a) - gKey(b) || a[0].creditor.localeCompare(b[0].creditor, "el"));
     for (const g of gList){
-    g.sort((x,y) => (activeIn(y,si) - activeIn(x,si)) || (x.kind || "").localeCompare(y.kind || "", "el") || (x.contract || "").localeCompare(y.contract || "", "el"));
+    g.sort((x,y) => sortKey(x) - sortKey(y) || (x.kind || "").localeCompare(y.kind || "", "el") || (x.contract || "").localeCompare(y.contract || "", "el"));
     const name = g[0].creditor.trim();
     let hue = 0; for (const ch of name.toLocaleLowerCase("el")) hue = (hue * 31 + ch.codePointAt(0)) % 360;
     const gm = r2(g.filter(d => activeIn(d,si)).reduce((s,d) => s + amtAt(d,si), 0));
@@ -536,7 +540,7 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
         <div class="drow">
           <div>
             <div class="dname"></div><div class="dcontract"></div><div class="dnote"></div>
-            <div class="dmeta">${act ? `Δόση ${si - fIdx(d) + 1} από ${n} · ${d.eom || Number(dueDay) === 31 ? "λήξη στο τέλος κάθε μήνα" : `λήξη κάθε ${Number(dueDay)} του μήνα`}` : (si < fIdx(d) ? `Ξεκινά ${mGen(fIdx(d))}` : `Ολοκληρώθηκε ${mGen(lIdx(d))}`)}</div>
+            <div class="dmeta">${act ? `Δόση ${si - fIdx(d) + 1} από ${n} · λήξη ${dueDayIn(d,si)} ${MONTHS[si%12]}${d.eom || Number(dueDay) === 31 ? " (τέλος μήνα)" : ""}` : (si < fIdx(d) ? `Ξεκινά ${mGen(fIdx(d))}` : `Ολοκληρώθηκε ${mGen(lIdx(d))}`)}</div>
           </div>
           <div class="damt"><b>${eur.format(amtAt(d, Math.min(Math.max(si, fIdx(d)), lIdx(d))))}</b><small>${hasChanges(d) ? "μεταβλητή δόση" : "τον μήνα"}</small></div>
         </div>
