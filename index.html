@@ -174,6 +174,9 @@ h1{font-size:1.35rem;font-weight:700;margin:0;letter-spacing:-.01em}
 .chip.late{border-color:var(--due);color:var(--due)}
 .chip.sel{box-shadow:0 0 0 2px var(--ink) inset}
 .dactions{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
+.chip.off{opacity:.45;border-style:dashed}
+.debt.paused .dmeta{color:var(--soft);font-weight:600}
+.btn.pause{color:var(--soft)}
 .btn{border:1px solid var(--rule);background:var(--paper);border-radius:10px;padding:9px 14px;font-weight:600;font-size:.9rem;min-height:42px}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--card)}
 .btn.danger{color:var(--due);border-color:var(--due)}
@@ -377,7 +380,13 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
   const remNow = d => Math.max(0, r2(d.total - paidAmt(d)));
   // scheduled remaining from month i onwards (assumes the schedule is followed)
   const remFrom = (d,i) => { if (i > lIdx(d)) return 0; return Math.max(0, r2(d.total - schedSum(d, fIdx(d), i - 1))); };
-  const overdue = (d,cur) => { let c = 0; for (let i = fIdx(d); i <= Math.min(cur-1, lIdx(d)); i++) if (!isPaid(d,i)) c++; return c; };
+  // a debt can be switched off from a month onwards: it then stops counting in every total from that month
+  const offIdx = d => d.offFrom ? idxOf(d.offFrom) : Infinity;
+  const lastOn = d => Math.min(lIdx(d), offIdx(d) - 1);
+  const counts = (d,i) => i >= fIdx(d) && i <= lastOn(d);
+  const overdue = (d,cur) => { let c = 0; for (let i = fIdx(d); i <= Math.min(cur-1, lastOn(d)); i++) if (!isPaid(d,i)) c++; return c; };
+  const remFromEff = (d,i) => { const o = offIdx(d); if (o === Infinity) return remFrom(d,i); if (i >= o) return 0; return Math.min(remFrom(d,i), schedSum(d, i, o - 1)); };
+  const remNowEff = d => offIdx(d) <= idxOf(todayStr()) ? 0 : remNow(d);
 
   // ---------- selected date ----------
   const dateEl = $("date");
@@ -407,7 +416,7 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
     let nextT = null, items = [];
     for (const d of debts){
       const day = d.eom ? 31 : Number(d.first.split("-")[2]);
-      for (let i = Math.max(cur, fIdx(d)); i <= lIdx(d); i++){
+      for (let i = Math.max(cur, fIdx(d)); i <= lastOn(d); i++){
         if (isPaid(d,i)) continue;
         const y = Math.floor(i/12), m = i%12;
         const t = new Date(y, m, Math.min(day, new Date(y, m+1, 0).getDate())).getTime();
@@ -443,7 +452,7 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
   function render(scrollStrip){
     const debts = state.debts;
     const si = selIdx(), cur = idxOf(todayStr());
-    const active = debts.filter(d => activeIn(d,si));
+    const active = debts.filter(d => counts(d,si));
     const mTotal = r2(active.reduce((s,d) => s + amtAt(d,si), 0));
     const mPaid = r2(active.filter(d => isPaid(d,si)).reduce((s,d) => s + amtAt(d,si), 0));
 
@@ -451,7 +460,7 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
     // unpaid installments from earlier months (before the selected month and before today)
     const late = [];
     for (const d of debts){
-      for (let i = fIdx(d); i <= Math.min(Math.min(si, cur) - 1, lIdx(d)); i++) if (!isPaid(d,i)) late.push({d, i, amt: amtAt(d,i)});
+      for (let i = fIdx(d); i <= Math.min(Math.min(si, cur) - 1, lastOn(d)); i++) if (!isPaid(d,i)) late.push({d, i, amt: amtAt(d,i)});
     }
     late.sort((x,y) => x.i - y.i);
     const lateSum = r2(late.reduce((s,x) => s + x.amt, 0));
@@ -486,10 +495,11 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
         lb.insertAdjacentHTML("beforeend", `<p class="warn3">Προσοχή: σε πολλές ρυθμίσεις, αν οι απλήρωτες δόσεις φτάσουν το ποσό τριών δόσεων, η ρύθμιση μπορεί να χαθεί. Έλεγξε τους όρους της δικής σου.</p>`);
     }
     $("remLbl").textContent = `Υπόλοιπο από ${MONTHS[si%12]} ${Math.floor(si/12)} και μετά`;
-    $("remFrom").textContent = eur.format(r2(debts.reduce((s,d) => s + remFrom(d,si), 0)));
+    $("remFrom").textContent = eur.format(r2(debts.reduce((s,d) => s + remFromEff(d,si), 0)));
     $("paidAll").textContent = eur.format(r2(debts.reduce((s,d) => s + paidAmt(d), 0)));
-    $("remNow").textContent = eur.format(r2(debts.reduce((s,d) => s + remNow(d), 0)));
-    $("count").textContent = debts.length ? `${debts.length} ${debts.length === 1 ? "οφειλή" : "οφειλές"}` : "";
+    $("remNow").textContent = eur.format(r2(debts.reduce((s,d) => s + remNowEff(d), 0)));
+    const nOff = debts.filter(d => activeIn(d,si) && si >= offIdx(d)).length;
+    $("count").textContent = debts.length ? `${debts.length} ${debts.length === 1 ? "οφειλή" : "οφειλές"}${nOff ? ` · ${nOff} ${nOff === 1 ? "ανενεργή" : "ανενεργές"}` : ""}` : "";
 
     renderNext(cur);
     renderStrip(si, cur, scrollStrip);
@@ -503,7 +513,7 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
     let a = Math.min(...debts.map(fIdx), si), b = Math.max(...debts.map(lIdx), si);
     const totals = [];
     for (let i = a; i <= b; i++){
-      const act = debts.filter(d => activeIn(d,i));
+      const act = debts.filter(d => counts(d,i));
       const t = act.reduce((s,d) => s + amtAt(d,i), 0);
       const p = act.filter(d => isPaid(d,i)).reduce((s,d) => s + amtAt(d,i), 0);
       totals.push({i,t,p});
@@ -558,13 +568,13 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
       "ending": d => idxOf(d.last),
       "alpha": d => 0,
       "amount": d => -amtAt(d, Math.min(Math.max(si, fIdx(d)), lIdx(d))),
-      "remaining": d => -remNow(d)
+      "remaining": d => -remNowEff(d)
     };
     const keyFn = keyFns[sortMode] || keyFns["due-asc"];
     // debts with no installment in the selected month always go last
     const dateMode = ["due-asc", "due-desc", "unpaid"].includes(sortMode);
     // finished debts always go last; in date modes debts that start later are placed by their real first date
-    const sortKey = d => (activeIn(d,si) || (dateMode && si < fIdx(d))) ? keyFn(d) : 1e15 + (si < fIdx(d) ? fIdx(d) - si : 900);
+    const sortKey = d => (counts(d,si) || (dateMode && si < fIdx(d) && fIdx(d) < offIdx(d))) ? keyFn(d) : 1e15 + (si < fIdx(d) ? fIdx(d) - si : 900);
     const txt = (x,y) => x.creditor.localeCompare(y.creditor, "el") || (x.kind || "").localeCompare(y.kind || "", "el") || (x.contract || "").localeCompare(y.contract || "", "el");
     const cmp = (x,y) => sortKey(x) - sortKey(y) || txt(x,y);
     let gList;
@@ -580,8 +590,8 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
     for (const g of gList){
     const name = g[0].creditor.trim();
     let hue = 0; for (const ch of name.toLocaleLowerCase("el")) hue = (hue * 31 + ch.codePointAt(0)) % 360;
-    const gm = r2(g.filter(d => activeIn(d,si)).reduce((s,d) => s + amtAt(d,si), 0));
-    const gr = r2(g.reduce((s,d) => s + remNow(d), 0));
+    const gm = r2(g.filter(d => counts(d,si)).reduce((s,d) => s + amtAt(d,si), 0));
+    const gr = r2(g.reduce((s,d) => s + remNowEff(d), 0));
     const sec = document.createElement("section");
     sec.className = "group" + (grouped ? "" : " flat");
     sec.style.setProperty("--h", hue);
@@ -592,24 +602,24 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
     }
     wrap.appendChild(sec);
     for (const d of g){
-      const act = activeIn(d,si), paidSel = isPaid(d,si), n = nInst(d), pc = paidCount(d), od = overdue(d,cur);
+      const act = counts(d,si), offNow = activeIn(d,si) && si >= offIdx(d), paidSel = isPaid(d,si), n = nInst(d), pc = paidCount(d), od = overdue(d,cur);
       const pct = d.total > 0 ? Math.min(100, paidAmt(d) / d.total * 100) : 0;
       const el = document.createElement("article");
-      el.className = "debt" + (act ? "" : " inactive");
+      el.className = "debt" + (act ? "" : " inactive") + (offNow ? " paused" : "");
       el.dataset.id = d.id;
       const dueDay = d.first.split("-")[2];
       el.innerHTML = `
         <div class="drow">
           <div>
             <div class="dname"></div><div class="dcontract"></div><div class="dnote"></div>
-            <div class="dmeta">${act ? `Δόση ${si - fIdx(d) + 1} από ${n} · λήξη ${dueDayIn(d,si)} ${MONTHS[si%12]}${d.eom || Number(dueDay) === 31 ? " (τέλος μήνα)" : ""}` : (si < fIdx(d) ? `Ξεκινά ${dueDayIn(d, fIdx(d))} ${MONTHS[fIdx(d)%12]} ${Math.floor(fIdx(d)/12)} · ${n} δόσεις` : `Ολοκληρώθηκε ${mGen(lIdx(d))}`)}</div>
+            <div class="dmeta">${offNow ? `⏸ Απενεργοποιημένη από ${mLabel(offIdx(d))}` : act ? `Δόση ${si - fIdx(d) + 1} από ${n} · λήξη ${dueDayIn(d,si)} ${MONTHS[si%12]}${d.eom || Number(dueDay) === 31 ? " (τέλος μήνα)" : ""}` : (si < fIdx(d) ? `Ξεκινά ${dueDayIn(d, fIdx(d))} ${MONTHS[fIdx(d)%12]} ${Math.floor(fIdx(d)/12)} · ${n} δόσεις` : `Ολοκληρώθηκε ${mGen(lIdx(d))}`)}</div>
           </div>
           <div class="damt"><b>${eur.format(amtAt(d, Math.min(Math.max(si, fIdx(d)), lIdx(d))))}</b><small>${hasChanges(d) ? "μεταβλητή δόση" : "τον μήνα"}</small></div>
         </div>
         <div class="prog" aria-hidden="true"><span style="width:${pct}%"></span></div>
         <div class="dfoot">
           <div class="nums">Υπόλοιπο <b>${eur.format(remNow(d))}</b> από ${eur.format(d.total)}${od ? `<span class="flag">${od} ${od===1?"απλήρωτη":"απλήρωτες"}</span>` : ""}</div>
-          <button class="paybtn" aria-pressed="${paidSel}" ${act ? "" : "disabled"}><span class="box">${paidSel ? "✓" : ""}</span>${act ? (paidSel ? `Πληρώθηκε ${MONTHS[si%12]}` : `Πλήρωσα ${MONTHS[si%12]}`) : "Εκτός ρύθμισης"}</button>
+          <button class="paybtn" aria-pressed="${paidSel}" ${act ? "" : "disabled"}><span class="box">${paidSel ? "✓" : ""}</span>${act ? (paidSel ? `Πληρώθηκε ${MONTHS[si%12]}` : `Πλήρωσα ${MONTHS[si%12]}`) : (offNow ? "Ανενεργή" : "Εκτός ρύθμισης")}</button>
         </div>
         <button class="more" aria-expanded="${open.has(d.id)}">${open.has(d.id) ? "▴ Κλείσιμο λεπτομερειών" : "▾ Λεπτομέρειες και πρόγραμμα"}</button>`;
       el.querySelector(".dname").textContent = grouped ? (d.kind || d.creditor) : d.creditor;
@@ -633,13 +643,14 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
             <dt>Σύνολο προγράμματος</dt><dd>${eur.format(schedSum(d, fIdx(d), lIdx(d)))}</dd>
             ${hasChanges(d) ? `<dt>Ποσά δόσης</dt><dd>${[{from: d.first.slice(0,7), amount: d.amount}, ...d.changes].map(c => `από ${mLabel(idxOf(c.from))}: ${eur.format(c.amount)}`).join("<br>")}</dd>` : ""}
             <dt>Πληρωμένες δόσεις</dt><dd>${pc} (${eur.format(paidAmt(d))})</dd>
-            <dt>Υπόλοιπο από ${MONTHS[si%12]} ${Math.floor(si/12)}</dt><dd>${eur.format(remFrom(d,si))}</dd>
+            <dt>Υπόλοιπο από ${MONTHS[si%12]} ${Math.floor(si/12)}</dt><dd>${eur.format(remFromEff(d,si))}</dd>
           </dl>
           <div class="notes" hidden><div class="lbl">Σημειώσεις</div><div class="ntext"></div></div>
           <div class="sched-h">Πάτα έναν μήνα για να τον σημειώσεις πληρωμένο ή απλήρωτο.</div>
           <div class="sched"></div>
           <div class="dactions">
             <button class="btn small" data-a="allpast">Πληρωμένες όλες ως ${MONTHS[(cur-1+12)%12]}</button>
+            <button class="btn small pause" data-a="pause">${d.offFrom ? `▶ Ενεργοποίηση ξανά` : `⏸ Απενεργοποίηση από ${MONTHS[Math.max(si, fIdx(d))%12]} ${Math.floor(Math.max(si, fIdx(d))/12)}`}</button>
             <button class="btn small" data-a="edit">Επεξεργασία</button>
             <button class="btn small danger" data-a="del">Διαγραφή</button>
           </div>`;
@@ -653,16 +664,22 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
         for (let i = fIdx(d); i <= lIdx(d); i++){
           const c = document.createElement("button");
           const p = isPaid(d,i);
-          c.className = "chip" + (p ? " paid" : (i < cur ? " late" : "")) + (i === si ? " sel" : "");
+          const offM = i >= offIdx(d);
+          c.className = "chip" + (p ? " paid" : (offM ? " off" : (i < cur ? " late" : ""))) + (i === si ? " sel" : "");
           c.setAttribute("aria-pressed", p);
           c.innerHTML = `${MONTHS[i%12]}<br>${Math.floor(i/12)}${hasChanges(d) ? `<br><small>${shortEur(amtAt(d,i))}</small>` : ""}`;
           c.onclick = () => togglePaid(d, i);
           grid.appendChild(c);
         }
         det.querySelector('[data-a="edit"]').onclick = () => openForm(d);
+        det.querySelector('[data-a="pause"]').onclick = () => {
+          const t = state.debts.find(x => x.id === d.id); if (!t) return;
+          if (t.offFrom) delete t.offFrom; else t.offFrom = keyOf(Math.max(si, fIdx(t)));
+          commit();
+        };
         det.querySelector('[data-a="allpast"]').onclick = () => {
           const d2 = byId(d.id); if (!d2) return;
-          for (let i = fIdx(d); i <= Math.min(cur-1, lIdx(d)); i++) if (!isPaid(d2,i)) d2.paid.push(keyOf(i));
+          for (let i = fIdx(d); i <= Math.min(cur-1, lastOn(d)); i++) if (!isPaid(d2,i)) d2.paid.push(keyOf(i));
           commit();
         };
         const del = det.querySelector('[data-a="del"]');
@@ -868,7 +885,7 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
     const out = { debts: [] };
     if (s && Array.isArray(s.debts)) for (const d of s.debts){
       if (!d || !d.first || !d.last) continue;
-      out.debts.push({ id: String(d.id || Math.random()), creditor: String(d.creditor || ""), code: String(d.code || ""), contract: String(d.contract || ""), kind: String(d.kind || ""), notes: String(d.notes || ""), eom: !!d.eom, first: String(d.first), last: String(d.last), amount: Number(d.amount) || 0, total: Number(d.total) || 0, paid: Array.isArray(d.paid) ? d.paid.map(String) : [], changes: Array.isArray(d.changes) ? d.changes.filter(c => c && c.from).map(c => ({from: String(c.from), amount: Number(c.amount) || 0})) : [] });
+      out.debts.push({ id: String(d.id || Math.random()), creditor: String(d.creditor || ""), code: String(d.code || ""), contract: String(d.contract || ""), kind: String(d.kind || ""), notes: String(d.notes || ""), eom: !!d.eom, ...(d.offFrom ? {offFrom: String(d.offFrom)} : {}), first: String(d.first), last: String(d.last), amount: Number(d.amount) || 0, total: Number(d.total) || 0, paid: Array.isArray(d.paid) ? d.paid.map(String) : [], changes: Array.isArray(d.changes) ? d.changes.filter(c => c && c.from).map(c => ({from: String(c.from), amount: Number(c.amount) || 0})) : [] });
     }
     return out;
   }
