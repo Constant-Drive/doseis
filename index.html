@@ -176,7 +176,13 @@ h1{font-size:1.35rem;font-weight:700;margin:0;letter-spacing:-.01em}
 .dactions{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
 .chip.off{opacity:.45;border-style:dashed}
 .debt.paused .dmeta{color:var(--soft);font-weight:600}
-.btn.pause{color:var(--soft)}
+.debt.paused{opacity:1}
+.debt.paused .drow,.debt.paused .prog,.debt.paused .nums{opacity:.6}
+.paygrp{display:inline-flex;gap:8px;align-items:center}
+.pausebtn{width:40px;height:40px;border-radius:999px;border:1.5px solid var(--rule);background:var(--paper);color:var(--soft);font-size:.9rem;display:grid;place-items:center;padding:0}
+.linkbtn{text-decoration:none;color:var(--accent);border-color:var(--accent)}
+.linkbtn[hidden]{display:none}
+.paybtn.resume{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
 .btn{border:1px solid var(--rule);background:var(--paper);border-radius:10px;padding:9px 14px;font-weight:600;font-size:.9rem;min-height:42px}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--card)}
 .btn.danger{color:var(--due);border-color:var(--due)}
@@ -294,6 +300,7 @@ dialog::backdrop{background:rgba(10,20,30,.45)}
     <h3 id="dlgTitle">Νέα οφειλή</h3>
     <div class="field"><label for="f_creditor">Φορέας</label><input id="f_creditor" list="creditors" required placeholder="π.χ. ΑΑΔΕ, e-ΕΦΚΑ, doValue"></div>
     <div class="field"><label for="f_code">Κωδικός πληρωμής</label><input id="f_code" inputmode="text" autocomplete="off" placeholder="π.χ. RF…"></div>
+    <div class="field"><label for="f_url">Σελίδα πληρωμής / διαχείρισης (προαιρετικό)</label><input id="f_url" type="url" inputmode="url" autocomplete="off" placeholder="https://…"></div>
     <div class="field"><label for="f_kind">Είδος οφειλής (προαιρετικό)</label><input id="f_kind" list="kinds" autocomplete="off" placeholder="π.χ. Επιχειρηματικό δάνειο"></div>
     <div class="field"><label for="f_contract">Αριθμός σύμβασης (προαιρετικό)</label><input id="f_contract" autocomplete="off" placeholder="π.χ. για δάνεια τραπεζών"></div>
     <div class="field"><label for="f_notes">Σημειώσεις (προαιρετικό)</label><textarea id="f_notes" rows="3" placeholder="π.χ. Είμαι εγγυητής — κύριος οφειλέτης ο …"></textarea></div>
@@ -437,6 +444,24 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
       <div class="who"></div></div>`;
     box.querySelector(".who").textContent = items.map(x => items.length > 1 ? `${dLabel(x.d)} ${eur.format(x.amt)}` : dLabel(x.d)).join(" · ");
   }
+
+  // ---------- creditor web pages ----------
+  const KNOWN_SITES = [
+    ["ααδε", "https://www.aade.gr/myaade"], ["aade", "https://www.aade.gr/myaade"],
+    ["εφκα", "https://www.efka.gov.gr"], ["efka", "https://www.efka.gov.gr"], ["οαεε", "https://www.efka.gov.gr"], ["ικα", "https://www.efka.gov.gr"], ["ογα", "https://www.efka.gov.gr"],
+    ["δυπα", "https://www.dypa.gov.gr"], ["οαεδ", "https://www.dypa.gov.gr"],
+    ["dovalue", "https://www.dovalue.gr"], ["cepal", "https://www.cepal.gr"], ["intrum", "https://www.intrum.gr"],
+    ["πειραιως", "https://www.piraeusbank.gr"], ["piraeus", "https://www.piraeusbank.gr"],
+    ["eurobank", "https://www.eurobank.gr"], ["εθνικη", "https://www.nbg.gr"], ["nbg", "https://www.nbg.gr"],
+    ["alpha", "https://www.alpha.gr"]
+  ];
+  const normName = s => String(s || "").toLocaleLowerCase("el").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zα-ω0-9]/g, "");
+  const knownSite = name => { const n = normName(name); if (!n) return ""; const hit = KNOWN_SITES.find(([k]) => n === k || (k.length > 3 && n.includes(k))); return hit ? hit[1] : ""; };
+  const normUrl = v => { v = String(v || "").trim(); if (!v) return ""; if (!/^https?:\/\//i.test(v)) v = "https://" + v; try { const u = new URL(v); return /^https?:$/.test(u.protocol) ? u.href : ""; } catch(e){ return ""; } };
+  // own link → link of another debt with the same creditor → known site of the creditor
+  const siteOf = d => d.url || (state.debts.find(x => x.url && normName(x.creditor) === normName(d.creditor)) || {}).url || knownSite(d.creditor);
+  function urlHint(){ const k = knownSite(F("creditor").value); F("url").placeholder = k ? `Αν μείνει κενό: ${k.replace(/^https:\/\//, "")}` : "https://…"; }
+  F("creditor").addEventListener("input", urlHint);
 
   // ---------- list sorting (remembered on this device) ----------
   let sortMode = "due-asc", grouped = true;
@@ -619,14 +644,17 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
         <div class="prog" aria-hidden="true"><span style="width:${pct}%"></span></div>
         <div class="dfoot">
           <div class="nums">Υπόλοιπο <b>${eur.format(remNow(d))}</b> από ${eur.format(d.total)}${od ? `<span class="flag">${od} ${od===1?"απλήρωτη":"απλήρωτες"}</span>` : ""}</div>
-          <button class="paybtn" aria-pressed="${paidSel}" ${act ? "" : "disabled"}><span class="box">${paidSel ? "✓" : ""}</span>${act ? (paidSel ? `Πληρώθηκε ${MONTHS[si%12]}` : `Πλήρωσα ${MONTHS[si%12]}`) : (offNow ? "Ανενεργή" : "Εκτός ρύθμισης")}</button>
+          ${offNow ? `<span class="paygrp"><button class="paybtn resume">▶ Ενεργοποίηση</button><a class="pausebtn linkbtn" target="_blank" rel="noopener noreferrer" hidden>🔗</a></span>` : `<span class="paygrp"><button class="paybtn" aria-pressed="${paidSel}" ${act ? "" : "disabled"}><span class="box">${paidSel ? "✓" : ""}</span>${act ? (paidSel ? `Πληρώθηκε ${MONTHS[si%12]}` : `Πλήρωσα ${MONTHS[si%12]}`) : "Εκτός ρύθμισης"}</button>${act ? `<button class="pausebtn" aria-label="Απενεργοποίηση από ${MONTHS[si%12]} ${Math.floor(si/12)}" title="Απενεργοποίηση από ${MONTHS[si%12]} ${Math.floor(si/12)}">⏸</button>` : ""}<a class="pausebtn linkbtn" target="_blank" rel="noopener noreferrer" hidden>🔗</a></span>`}
         </div>
         <button class="more" aria-expanded="${open.has(d.id)}">${open.has(d.id) ? "▴ Κλείσιμο λεπτομερειών" : "▾ Λεπτομέρειες και πρόγραμμα"}</button>`;
       el.querySelector(".dname").textContent = grouped ? (d.kind || d.creditor) : d.creditor;
       const dcParts = [grouped ? "" : d.kind, d.contract ? "Σύμβαση " + d.contract : ""].filter(Boolean);
       const dc = el.querySelector(".dcontract"); if (dcParts.length) dc.textContent = dcParts.join(" · "); else dc.remove();
       const dn = el.querySelector(".dnote"); if (d.notes) dn.textContent = "📝 " + d.notes; else dn.remove();
-      el.querySelector(".paybtn").onclick = () => { if (act) togglePaid(d, si); };
+      el.querySelector(".paybtn").onclick = () => { if (offNow) setOff(d, null); else if (act) togglePaid(d, si); };
+      const pb = el.querySelector(".pausebtn:not(.linkbtn)"); if (pb) pb.onclick = () => setOff(d, keyOf(si));
+      const site = siteOf(d), lk = el.querySelector(".linkbtn");
+      if (site && lk){ lk.href = site; lk.hidden = false; lk.title = lk.ariaLabel = `Σελίδα ${d.creditor} για πληρωμή / διαχείριση`; }
       el.querySelector(".more").onclick = () => { open.has(d.id) ? open.delete(d.id) : open.add(d.id); render(false); };
 
       if (open.has(d.id)){
@@ -650,7 +678,6 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
           <div class="sched"></div>
           <div class="dactions">
             <button class="btn small" data-a="allpast">Πληρωμένες όλες ως ${MONTHS[(cur-1+12)%12]}</button>
-            <button class="btn small pause" data-a="pause">${d.offFrom ? `▶ Ενεργοποίηση ξανά` : `⏸ Απενεργοποίηση από ${MONTHS[Math.max(si, fIdx(d))%12]} ${Math.floor(Math.max(si, fIdx(d))/12)}`}</button>
             <button class="btn small" data-a="edit">Επεξεργασία</button>
             <button class="btn small danger" data-a="del">Διαγραφή</button>
           </div>`;
@@ -672,11 +699,6 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
           grid.appendChild(c);
         }
         det.querySelector('[data-a="edit"]').onclick = () => openForm(d);
-        det.querySelector('[data-a="pause"]').onclick = () => {
-          const t = state.debts.find(x => x.id === d.id); if (!t) return;
-          if (t.offFrom) delete t.offFrom; else t.offFrom = keyOf(Math.max(si, fIdx(t)));
-          commit();
-        };
         det.querySelector('[data-a="allpast"]').onclick = () => {
           const d2 = byId(d.id); if (!d2) return;
           for (let i = fIdx(d); i <= Math.min(cur-1, lastOn(d)); i++) if (!isPaid(d2,i)) d2.paid.push(keyOf(i));
@@ -700,6 +722,11 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
 
   const dLabel = d => d.creditor + (d.kind ? ` · ${d.kind}` : "") + (d.contract ? ` …${d.contract.slice(-4)}` : "");
   const byId = id => state.debts.find(x => x.id === id);
+  function setOff(dd, key){
+    const t = state.debts.find(x => x.id === dd.id); if (!t) return;
+    if (key) t.offFrom = key; else delete t.offFrom;
+    commit();
+  }
   function togglePaid(dd, i){
     const d = byId(dd.id); if (!d) return;
     const k = keyOf(i);
@@ -731,6 +758,8 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
     F("contract").value = d?.contract || "";
     F("kind").value = d?.kind || "";
     F("notes").value = d?.notes || "";
+    F("url").value = d?.url || "";
+    urlHint();
     F("eom").checked = !!d?.eom;
     F("first").value = d?.first || "";
     F("last").value = d?.last || "";
@@ -844,7 +873,7 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
   $("addBtn").onclick = () => openForm(null);
   $("form").addEventListener("submit", e => {
     e.preventDefault();
-    const creditor = F("creditor").value.trim(), code = F("code").value.trim(), contract = F("contract").value.trim(), kind = F("kind").value.trim(), notes = F("notes").value.trim(), eom = F("eom").checked, first = F("first").value, last = F("last").value;
+    const creditor = F("creditor").value.trim(), code = F("code").value.trim(), contract = F("contract").value.trim(), kind = F("kind").value.trim(), notes = F("notes").value.trim(), url = normUrl(F("url").value), eom = F("eom").checked, first = F("first").value, last = F("last").value;
     const amount = parseNum(F("amount").value), total = parseNum(F("total").value);
     const err = m => { $("f_err").textContent = m; };
     if (!creditor) return err("Συμπλήρωσε τον φορέα.");
@@ -862,10 +891,10 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
     const changes = [...chMap].map(([from, amount]) => ({from, amount}));
     const target = editing ? byId(editing.id) : null;
     if (target){
-      Object.assign(target, {creditor, code, contract, kind, notes, eom, first, last, amount, total, changes});
+      Object.assign(target, {creditor, code, contract, kind, notes, url, eom, first, last, amount, total, changes});
       target.paid = target.paid.filter(k => activeIn(target, idxOf(k)));
     } else {
-      state.debts.push({ id: "d" + Date.now().toString(36) + Math.random().toString(36).slice(2,6), creditor, code, contract, kind, notes, eom, first, last, amount, total, paid: [], changes });
+      state.debts.push({ id: "d" + Date.now().toString(36) + Math.random().toString(36).slice(2,6), creditor, code, contract, kind, notes, url, eom, first, last, amount, total, paid: [], changes });
     }
     dlg.close();
     commit(true);
@@ -885,7 +914,7 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
     const out = { debts: [] };
     if (s && Array.isArray(s.debts)) for (const d of s.debts){
       if (!d || !d.first || !d.last) continue;
-      out.debts.push({ id: String(d.id || Math.random()), creditor: String(d.creditor || ""), code: String(d.code || ""), contract: String(d.contract || ""), kind: String(d.kind || ""), notes: String(d.notes || ""), eom: !!d.eom, ...(d.offFrom ? {offFrom: String(d.offFrom)} : {}), first: String(d.first), last: String(d.last), amount: Number(d.amount) || 0, total: Number(d.total) || 0, paid: Array.isArray(d.paid) ? d.paid.map(String) : [], changes: Array.isArray(d.changes) ? d.changes.filter(c => c && c.from).map(c => ({from: String(c.from), amount: Number(c.amount) || 0})) : [] });
+      out.debts.push({ id: String(d.id || Math.random()), creditor: String(d.creditor || ""), code: String(d.code || ""), contract: String(d.contract || ""), kind: String(d.kind || ""), notes: String(d.notes || ""), url: String(d.url || ""), eom: !!d.eom, ...(d.offFrom ? {offFrom: String(d.offFrom)} : {}), first: String(d.first), last: String(d.last), amount: Number(d.amount) || 0, total: Number(d.total) || 0, paid: Array.isArray(d.paid) ? d.paid.map(String) : [], changes: Array.isArray(d.changes) ? d.changes.filter(c => c && c.from).map(c => ({from: String(c.from), amount: Number(c.amount) || 0})) : [] });
     }
     return out;
   }
