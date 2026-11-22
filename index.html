@@ -461,7 +461,6 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
   // own link → link of another debt with the same creditor → known site of the creditor
   const siteOf = d => d.url || (state.debts.find(x => x.url && normName(x.creditor) === normName(d.creditor)) || {}).url || knownSite(d.creditor);
   function urlHint(){ const k = knownSite(F("creditor").value); F("url").placeholder = k ? `Αν μείνει κενό: ${k.replace(/^https:\/\//, "")}` : "https://…"; }
-  F("creditor").addEventListener("input", urlHint);
 
   // ---------- list sorting (remembered on this device) ----------
   let sortMode = "due-asc", grouped = true;
@@ -750,6 +749,7 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
   // ---------- form ----------
   const dlg = $("dlg");
   const F = k => $("f_"+k);
+  F("creditor").addEventListener("input", urlHint);
   function openForm(d){
     editing = d;
     $("dlgTitle").textContent = d ? "Επεξεργασία οφειλής" : "Νέα οφειλή";
