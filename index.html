@@ -155,6 +155,10 @@ h1{font-size:1.35rem;font-weight:700;margin:0;letter-spacing:-.01em}
 .paybtn .box{width:18px;height:18px;border-radius:5px;border:2px solid var(--soft);display:grid;place-items:center;font-size:.75rem;line-height:1}
 .paybtn[aria-pressed="true"]{border-color:var(--paid);background:var(--paid-bg);color:var(--paid)}
 .paybtn[aria-pressed="true"] .box{background:var(--paid);border-color:var(--paid);color:var(--card)}
+.armed,.paybtn.armed,.chip.armed,.lrow button.armed,.pausebtn.armed{background:var(--accent)!important;border-color:var(--accent)!important;color:var(--card)!important;font-weight:700}
+.armed.undo{background:var(--due)!important;border-color:var(--due)!important}
+.pausebtn.armed{width:auto;padding:0 12px;font-size:.8rem;border-radius:999px}
+.chip.armed{font-size:.72rem}
 .paybtn:disabled{cursor:default;color:var(--soft);font-weight:500}
 .more{width:100%;border:none;border-top:1px solid var(--rule);background:none;padding:10px 14px;text-align:left;color:var(--accent);font-weight:600;font-size:.9rem}
 .detail{border-top:1px solid var(--rule);padding:14px}
@@ -512,7 +516,7 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
         row.className = "lrow";
         row.innerHTML = `<div class="n"><span></span><small>${mLabel(x.i)} · ${eur.format(x.amt)}</small></div><button>Πλήρωσα</button>`;
         row.querySelector("span").textContent = dLabel(x.d);
-        row.querySelector("button").onclick = () => togglePaid(x.d, x.i);
+        const lb2 = row.querySelector("button"); lb2.onclick = () => confirmTap(lb2, "Επιβεβαίωση", () => togglePaid(x.d, x.i));
         lb.appendChild(row);
       }
       if (debts.some(d => late.filter(x => x.d === d).length >= 2))
@@ -650,8 +654,13 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
       const dcParts = [grouped ? "" : d.kind, d.contract ? "Σύμβαση " + d.contract : ""].filter(Boolean);
       const dc = el.querySelector(".dcontract"); if (dcParts.length) dc.textContent = dcParts.join(" · "); else dc.remove();
       const dn = el.querySelector(".dnote"); if (d.notes) dn.textContent = "📝 " + d.notes; else dn.remove();
-      el.querySelector(".paybtn").onclick = () => { if (offNow) setOff(d, null); else if (act) togglePaid(d, si); };
-      const pb = el.querySelector(".pausebtn:not(.linkbtn)"); if (pb) pb.onclick = () => setOff(d, keyOf(si));
+      const payB = el.querySelector(".paybtn");
+      payB.onclick = () => {
+        if (offNow) return confirmTap(payB, "Πάτα ξανά για ενεργοποίηση", () => setOff(d, null));
+        if (!act) return;
+        confirmTap(payB, paidSel ? `Ακύρωση πληρωμής ${MONTHS[si%12]};` : `Επιβεβαίωση πληρωμής ${MONTHS[si%12]}`, () => togglePaid(d, si), paidSel);
+      };
+      const pb = el.querySelector(".pausebtn:not(.linkbtn)"); if (pb) pb.onclick = () => confirmTap(pb, "Απενεργοποίηση;", () => setOff(d, keyOf(si)), true);
       const site = siteOf(d), lk = el.querySelector(".linkbtn");
       if (site && lk){ lk.href = site; lk.hidden = false; lk.title = lk.ariaLabel = `Σελίδα ${d.creditor} για πληρωμή / διαχείριση`; }
       el.querySelector(".more").onclick = () => { open.has(d.id) ? open.delete(d.id) : open.add(d.id); render(false); };
@@ -694,15 +703,16 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
           c.className = "chip" + (p ? " paid" : (offM ? " off" : (i < cur ? " late" : ""))) + (i === si ? " sel" : "");
           c.setAttribute("aria-pressed", p);
           c.innerHTML = `${MONTHS[i%12]}<br>${Math.floor(i/12)}${hasChanges(d) ? `<br><small>${shortEur(amtAt(d,i))}</small>` : ""}`;
-          c.onclick = () => togglePaid(d, i);
+          c.onclick = () => confirmTap(c, p ? "Ακύρωση;" : "Πληρώθηκε;", () => togglePaid(d, i), p);
           grid.appendChild(c);
         }
         det.querySelector('[data-a="edit"]').onclick = () => openForm(d);
-        det.querySelector('[data-a="allpast"]').onclick = () => {
+        const allB = det.querySelector('[data-a="allpast"]');
+        allB.onclick = () => confirmTap(allB, "Πάτα ξανά για επιβεβαίωση", () => {
           const d2 = byId(d.id); if (!d2) return;
           for (let i = fIdx(d); i <= Math.min(cur-1, lastOn(d)); i++) if (!isPaid(d2,i)) d2.paid.push(keyOf(i));
           commit();
-        };
+        });
         const del = det.querySelector('[data-a="del"]');
         del.onclick = () => {
           if (del.dataset.armed){ state.debts = state.debts.filter(x => x.id !== d.id); open.delete(d.id); commit(); }
@@ -721,6 +731,18 @@ try { ({ firebaseConfig } = await import("./firebase-config.js")); } catch(e) { 
 
   const dLabel = d => d.creditor + (d.kind ? ` · ${d.kind}` : "") + (d.contract ? ` …${d.contract.slice(-4)}` : "");
   const byId = id => state.debts.find(x => x.id === id);
+  // two-tap confirmation: first tap asks, second tap (within 4 s) does it
+  function confirmTap(btn, label, action, undo){
+    if (btn.dataset.armed){ clearTimeout(btn._t); action(); return; }
+    document.querySelectorAll("[data-armed]").forEach(b => { clearTimeout(b._t); b._restore && b._restore(); });
+    const html = btn.innerHTML, aria = btn.getAttribute("aria-label");
+    btn._restore = () => { delete btn.dataset.armed; btn.classList.remove("armed", "undo"); btn.innerHTML = html; if (aria) btn.setAttribute("aria-label", aria); else btn.removeAttribute("aria-label"); };
+    btn.dataset.armed = "1";
+    btn.classList.add("armed"); if (undo) btn.classList.add("undo");
+    btn.textContent = label;
+    btn.setAttribute("aria-label", label);
+    btn._t = setTimeout(() => { if (btn.isConnected) btn._restore(); }, 4000);
+  }
   function setOff(dd, key){
     const t = state.debts.find(x => x.id === dd.id); if (!t) return;
     if (key) t.offFrom = key; else delete t.offFrom;
